@@ -7,21 +7,21 @@
 
 namespace xsf_math {
 
-// Lightweight 6-state Kalman filter for position/velocity tracking (WCS)
-// State: [x, y, z, vx, vy, vz]
-// Measurement: [x, y, z] (position only)
+// 轻量级 6 状态卡尔曼滤波器，用于位置/速度跟踪（WCS）
+// 状态： [x, y, z, vx, vy, vz]
+// 量测： [x, y, z]（仅位置）
 struct kalman_filter_6state {
 
-    // State vector [x, y, z, vx, vy, vz]
+    // 状态向量 [x, y, z, vx, vy, vz]
     double state[6] = {};
 
-    // State covariance P (6x6, symmetric, stored full)
+    // 状态协方差 P（6x6，对称矩阵，完整存储）
     double P[6][6] = {};
 
-    // Process noise spectral density (acceleration variance per axis)
+    // 过程噪声谱密度（每个轴的加速度方差）
     double process_noise[3] = {1.0, 1.0, 1.0};  // m^2/s^4
 
-    // Measurement noise variance (position variance per axis)
+    // 量测噪声方差（每个轴的位置方差）
     double meas_noise[3] = {100.0, 100.0, 100.0};  // m^2
 
     bool initialized = false;
@@ -33,55 +33,55 @@ struct kalman_filter_6state {
         initialized = false;
     }
 
-    // Initialize with first measurement
+    // 以首个量测初始化
     void init(double time, const vec3& pos, const vec3& vel = {0,0,0}) {
         state[0] = pos.x;  state[1] = pos.y;  state[2] = pos.z;
         state[3] = vel.x;  state[4] = vel.y;  state[5] = vel.z;
 
-        // Initialize covariance
+        // 初始化协方差
         std::memset(P, 0, sizeof(P));
         for (int i = 0; i < 3; ++i) {
-            P[i][i]     = meas_noise[i];           // position uncertainty
-            P[i+3][i+3] = meas_noise[i] * 4.0;     // velocity uncertainty (larger)
+            P[i][i]     = meas_noise[i];           // 位置不确定度
+            P[i+3][i+3] = meas_noise[i] * 4.0;     // 速度不确定度（更大）
         }
 
         last_time = time;
         initialized = true;
     }
 
-    // Predict step (constant velocity model)
+    // 预测步骤（恒速模型）
     void predict(double time) {
         if (!initialized) return;
 
         double dt = time - last_time;
         if (dt <= 0.0) return;
 
-        // State prediction: x = F * x (constant velocity)
+        // 状态预测：x = F * x（恒速）
         for (int i = 0; i < 3; ++i) {
             state[i] += state[i+3] * dt;
         }
 
-        // Covariance prediction: P = F*P*F' + Q
+        // 协方差预测：P = F*P*F' + Q
         // F = [I dt*I; 0 I]
-        // F*P*F' calculated explicitly
+        // 显式计算 F*P*F'
         double Pnew[6][6];
         std::memset(Pnew, 0, sizeof(Pnew));
 
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
-                // Position-position block
+                // 位置-位置块
                 Pnew[i][j] = P[i][j] + dt * (P[i][j+3] + P[i+3][j]) + dt*dt * P[i+3][j+3];
-                // Position-velocity block
+                // 位置-速度块
                 Pnew[i][j+3] = P[i][j+3] + dt * P[i+3][j+3];
-                // Velocity-position block
+                // 速度-位置块
                 Pnew[i+3][j] = P[i+3][j] + dt * P[i+3][j+3];
-                // Velocity-velocity block
+                // 速度-速度块
                 Pnew[i+3][j+3] = P[i+3][j+3];
             }
         }
 
-        // Add process noise Q
-        // Q derived from constant-acceleration model with spectral density q
+        // 加入过程噪声 Q
+        // Q 由恒加速度模型和谱密度 q 推导得到
         double dt2 = dt * dt;
         double dt3 = dt2 * dt;
         double dt4 = dt3 * dt;
@@ -96,7 +96,7 @@ struct kalman_filter_6state {
         last_time = time;
     }
 
-    // Update step with position measurement
+    // 使用位置量测进行更新
     void update(double time, const vec3& meas_pos) {
         if (!initialized) {
             init(time, meas_pos);
@@ -105,14 +105,14 @@ struct kalman_filter_6state {
 
         predict(time);
 
-        // Innovation: y = z - H*x (H = [I 0])
+        // 创新项：y = z - H*x（H = [I 0]）
         double y[3] = {
             meas_pos.x - state[0],
             meas_pos.y - state[1],
             meas_pos.z - state[2]
         };
 
-        // Innovation covariance: S = H*P*H' + R (3x3)
+        // 创新协方差：S = H*P*H' + R（3x3）
         double S[3][3];
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
@@ -121,11 +121,11 @@ struct kalman_filter_6state {
             S[i][i] += meas_noise[i];
         }
 
-        // Invert S (3x3) using cofactor method
+        // 使用余子式法求逆 S（3x3）
         double S_inv[3][3];
         invert_3x3(S, S_inv);
 
-        // Kalman gain: K = P * H' * S^-1  (6x3)
+        // 卡尔曼增益：K = P * H' * S^-1（6x3）
         double K[6][3];
         for (int i = 0; i < 6; ++i) {
             for (int j = 0; j < 3; ++j) {
@@ -136,14 +136,14 @@ struct kalman_filter_6state {
             }
         }
 
-        // State update: x = x + K * y
+        // 状态更新：x = x + K * y
         for (int i = 0; i < 6; ++i) {
             for (int j = 0; j < 3; ++j) {
                 state[i] += K[i][j] * y[j];
             }
         }
 
-        // Covariance update: P = (I - K*H) * P
+        // 协方差更新：P = (I - K*H) * P
         double Pnew[6][6];
         for (int i = 0; i < 6; ++i) {
             for (int j = 0; j < 6; ++j) {
@@ -156,18 +156,18 @@ struct kalman_filter_6state {
         std::memcpy(P, Pnew, sizeof(P));
     }
 
-    // No-detect update (prediction only)
+    // 无探测更新（仅预测）
     void no_detect_update(double time) {
         predict(time);
     }
 
-    // Get estimated position
+    // 获取估计位置
     vec3 position() const { return {state[0], state[1], state[2]}; }
 
-    // Get estimated velocity
+    // 获取估计速度
     vec3 velocity() const { return {state[3], state[4], state[5]}; }
 
-    // Chi-squared track score (normalized innovation squared)
+    // 卡方轨迹评分（归一化创新平方）
     double track_score(const vec3& meas_pos) const {
         double y[3] = {
             meas_pos.x - state[0],
@@ -198,7 +198,7 @@ private:
                    + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
 
         if (std::abs(det) < 1e-30) {
-            // Singular - return identity-like fallback
+            // 奇异情况 - 返回类似单位阵的回退结果
             std::memset(inv, 0, 9 * sizeof(double));
             for (int i = 0; i < 3; ++i) inv[i][i] = 1e10;
             return;
@@ -217,10 +217,10 @@ private:
     }
 };
 
-// Alpha-Beta filter (simpler, for smoothing noisy position data)
+// Alpha-Beta 滤波器（更简单，用于平滑噪声位置数据）
 struct alpha_beta_filter {
-    double alpha = 0.5;   // position smoothing (0-1)
-    double beta  = 0.1;   // velocity smoothing (0-1)
+    double alpha = 0.5;   // 位置平滑系数（0-1）
+    double beta  = 0.1;   // 速度平滑系数（0-1）
 
     vec3 pos = {};
     vec3 vel = {};
@@ -244,13 +244,13 @@ struct alpha_beta_filter {
         double dt = time - last_time;
         if (dt <= 0.0) return;
 
-        // Predict
+        // 预测
         vec3 pos_pred = pos + vel * dt;
 
-        // Residual
+        // 残差
         vec3 residual = meas_pos - pos_pred;
 
-        // Correct
+        // 修正
         pos = pos_pred + residual * alpha;
         vel = vel + residual * (beta / dt);
 

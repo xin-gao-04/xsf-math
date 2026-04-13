@@ -6,88 +6,88 @@
 
 namespace xsf_math {
 
-// International Standard Atmosphere (ISA) 1976 model
-// Valid from -2 km to ~85 km geopotential altitude
+// 1976 年国际标准大气（ISA）模型
+// 适用范围为 -2 km 到约 85 km 位势高度
 struct atmosphere {
 
-    // Temperature at altitude (K)
-    // Supports troposphere (0-11km) and lower stratosphere (11-20km)
+    // 指定高度的温度（K）
+    // 支持对流层（0-11km）和下平流层（11-20km）
     static double temperature(double alt_m) {
         if (alt_m <= constants::tropopause_alt) {
             return constants::ssl_temperature - constants::lapse_rate * alt_m;
         }
-        // Lower stratosphere: isothermal
+        // 下平流层：等温
         if (alt_m <= 20000.0) {
             return constants::tropopause_temp;
         }
-        // Upper stratosphere: temperature increases
+        // 上平流层：温度上升
         if (alt_m <= 32000.0) {
             return constants::tropopause_temp + 0.001 * (alt_m - 20000.0);
         }
-        // Simplified above 32km
+        // 32km 以上的简化模型
         return constants::tropopause_temp + 12.0 + 0.0028 * (alt_m - 32000.0);
     }
 
-    // Temperature ratio (T / T_ssl)
+    // 温度比（T / T_ssl）
     static double temperature_ratio(double alt_m) {
         return temperature(alt_m) / constants::ssl_temperature;
     }
 
-    // Pressure at altitude (Pa)
+    // 指定高度的压力（Pa）
     static double pressure(double alt_m) {
         if (alt_m <= constants::tropopause_alt) {
             double temp_ratio = temperature(alt_m) / constants::ssl_temperature;
             return constants::ssl_pressure * std::pow(temp_ratio, constants::gmr / constants::lapse_rate);
         }
-        // Above tropopause: exponential decay
+        // 对流层顶以上：指数衰减
         double p_trop = pressure(constants::tropopause_alt);
         double dh = alt_m - constants::tropopause_alt;
         return p_trop * std::exp(-constants::gmr * dh / constants::tropopause_temp);
     }
 
-    // Pressure ratio (P / P_ssl)
+    // 压力比（P / P_ssl）
     static double pressure_ratio(double alt_m) {
         return pressure(alt_m) / constants::ssl_pressure;
     }
 
-    // Air density at altitude (kg/m^3)
+    // 指定高度的空气密度（kg/m^3）
     static double density(double alt_m) {
         return pressure(alt_m) / (constants::gas_constant_air * temperature(alt_m));
     }
 
-    // Density ratio (rho / rho_ssl)
+    // 密度比（rho / rho_ssl）
     static double density_ratio(double alt_m) {
         return density(alt_m) / constants::ssl_density;
     }
 
-    // Speed of sound at altitude (m/s)
+    // 指定高度的声速（m/s）
     static double sonic_velocity(double alt_m) {
         return std::sqrt(constants::gamma_air * constants::gas_constant_air * temperature(alt_m));
     }
 
-    // Dynamic pressure q = 0.5 * rho * V^2
+    // 动压 q = 0.5 * rho * V^2
     static double dynamic_pressure(double alt_m, double speed_mps) {
         return 0.5 * density(alt_m) * speed_mps * speed_mps;
     }
 
-    // Mach number
+    // 马赫数
     static double mach_number(double alt_m, double speed_mps) {
         return speed_mps / sonic_velocity(alt_m);
     }
 
-    // True airspeed from Mach number
+    // 根据马赫数反算真空速
     static double speed_from_mach(double alt_m, double mach) {
         return mach * sonic_velocity(alt_m);
     }
 
-    // Density altitude: altitude in standard atmosphere with same density
+    // 密度高度：标准大气中与当前密度相同的高度
     static double density_altitude(double alt_m, double delta_temp_k = 0.0) {
         double T = temperature(alt_m) + delta_temp_k;
         double P = pressure(alt_m);
         double rho = P / (constants::gas_constant_air * T);
-        // Invert density formula for troposphere
+        // 对流层密度公式求逆
         // rho = rho_ssl * (T/T_ssl)^(g/(L*R) - 1)
-        // Simplified Newton iteration for altitude given density
+        // 使用简化的牛顿迭代求解密度对应的高度
         double h = alt_m;
         for (int i = 0; i < 10; ++i) {
             double rho_h = density(h);
@@ -98,22 +98,22 @@ struct atmosphere {
         return h;
     }
 
-    // Dynamic viscosity (Sutherland's law) in kg/(m*s)
+    // 动力黏度（Sutherland 定律），单位 kg/(m*s)
     static double dynamic_viscosity(double alt_m) {
         double T = temperature(alt_m);
-        // Sutherland's formula: mu = mu_ref * (T/T_ref)^(3/2) * (T_ref+S)/(T+S)
-        constexpr double mu_ref = 1.716e-5;  // reference viscosity at T_ref
-        constexpr double T_ref  = 273.15;     // reference temperature (K)
-        constexpr double S      = 110.4;      // Sutherland constant (K)
+        // Sutherland 公式：mu = mu_ref * (T/T_ref)^(3/2) * (T_ref+S)/(T+S)
+        constexpr double mu_ref = 1.716e-5;  // T_ref 下的参考黏度
+        constexpr double T_ref  = 273.15;     // 参考温度（K）
+        constexpr double S      = 110.4;      // Sutherland 常数（K）
         return mu_ref * std::pow(T / T_ref, 1.5) * (T_ref + S) / (T + S);
     }
 
-    // Kinematic viscosity in m^2/s
+    // 运动黏度，单位 m^2/s
     static double kinematic_viscosity(double alt_m) {
         return dynamic_viscosity(alt_m) / density(alt_m);
     }
 
-    // Non-standard atmosphere: apply temperature offset
+    // 非标准大气：施加温度偏差
     struct non_standard {
         double delta_temp_k = 0.0;
 

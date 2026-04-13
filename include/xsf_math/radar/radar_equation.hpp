@@ -8,50 +8,50 @@
 
 namespace xsf_math {
 
-// Transmitter parameters
+// 发射机参数
 struct transmitter_params {
-    double peak_power_w       = 1000.0;   // peak transmit power (W)
-    double frequency_hz       = 10.0e9;   // operating frequency
-    double pulse_width_s      = 1.0e-6;   // pulse width
-    double prf_hz             = 1000.0;    // pulse repetition frequency
+    double peak_power_w       = 1000.0;   // 峰值发射功率（W）
+    double frequency_hz       = 10.0e9;   // 工作频率
+    double pulse_width_s      = 1.0e-6;   // 脉宽
+    double prf_hz             = 1000.0;    // 脉冲重复频率
     double duty_cycle         = 0.001;     // pulse_width * PRF
-    double bandwidth_hz       = 1.0e6;     // receiver bandwidth
-    double system_loss_db     = 3.0;       // total system losses
+    double bandwidth_hz       = 1.0e6;     // 接收机带宽
+    double system_loss_db     = 3.0;       // 系统总损耗
 };
 
-// Receiver parameters
+// 接收机参数
 struct receiver_params {
-    double noise_figure_db   = 3.0;       // noise figure
-    double noise_temp_k      = 290.0;     // system noise temperature
-    double bandwidth_hz      = 1.0e6;     // receiver bandwidth
-    double processing_gain_db = 0.0;      // signal processing gain
+    double noise_figure_db   = 3.0;       // 噪声系数
+    double noise_temp_k      = 290.0;     // 系统噪声温度
+    double bandwidth_hz      = 1.0e6;     // 接收机带宽
+    double processing_gain_db = 0.0;      // 信号处理增益
 
-    // Thermal noise power (W)
+    // 热噪声功率（W）
     double noise_power_w() const {
         double nf = db_to_linear(noise_figure_db);
         return constants::boltzmann_k * noise_temp_k * bandwidth_hz * nf;
     }
 };
 
-// Radar geometry
+// 雷达几何参数
 struct radar_geometry {
-    double range_m;                        // slant range to target
-    double target_rcs_m2;                  // target RCS in m^2
-    double tx_antenna_gain_db = 30.0;      // transmit antenna gain toward target
-    double rx_antenna_gain_db = 30.0;      // receive antenna gain toward target
-    double elevation_rad      = 0.0;       // elevation angle to target
+    double range_m;                        // 到目标的斜距
+    double target_rcs_m2;                  // 目标 RCS（m^2）
+    double tx_antenna_gain_db = 30.0;      // 指向目标的发射天线增益
+    double rx_antenna_gain_db = 30.0;      // 指向目标的接收天线增益
+    double elevation_rad      = 0.0;       // 指向目标的俯仰角
 };
 
-// Monostatic radar equation result
+// 单基地雷达方程结果
 struct radar_equation_result {
-    double signal_power_w;     // received signal power
-    double noise_power_w;      // noise power
-    double snr_linear;         // signal-to-noise ratio (linear)
-    double snr_db;             // SNR in dB
-    double max_range_m;        // maximum detection range for given parameters
+    double signal_power_w;     // 接收信号功率
+    double noise_power_w;      // 噪声功率
+    double snr_linear;         // 信噪比（线性值）
+    double snr_db;             // 信噪比（dB）
+    double max_range_m;        // 给定参数下的最大探测距离
 };
 
-// Monostatic radar equation
+// 单基地雷达方程
 // Pr = (Pt * Gt * Gr * lambda^2 * sigma) / ((4*pi)^3 * R^4 * L)
 inline radar_equation_result monostatic_radar_equation(
         const transmitter_params& tx,
@@ -72,25 +72,25 @@ inline radar_equation_result monostatic_radar_equation(
     r.signal_power_w = (denominator > 0.0) ? numerator / denominator : 0.0;
     r.noise_power_w  = rx.noise_power_w();
 
-    // Apply processing gain
+    // 应用处理增益
     double proc_gain = db_to_linear(rx.processing_gain_db);
     r.signal_power_w *= proc_gain;
 
     r.snr_linear = (r.noise_power_w > 0.0) ? r.signal_power_w / r.noise_power_w : 0.0;
     r.snr_db     = (r.snr_linear > 0.0) ? linear_to_db(r.snr_linear) : -999.0;
 
-    // Maximum range (SNR = 1, 0 dB threshold)
+    // 最大作用距离（SNR = 1，0 dB 门限）
     double max_R4 = numerator / (four_pi_cubed * L * r.noise_power_w);
     r.max_range_m = (max_R4 > 0.0) ? std::pow(max_R4, 0.25) : 0.0;
 
     return r;
 }
 
-// Bistatic radar equation
+// 双基地雷达方程
 // Pr = (Pt * Gt * Gr * lambda^2 * sigma) / ((4*pi)^3 * Rt^2 * Rr^2 * L)
 struct bistatic_geometry {
-    double range_tx_m;           // range from TX to target
-    double range_rx_m;           // range from target to RX
+    double range_tx_m;           // 发射机到目标的距离
+    double range_rx_m;           // 目标到接收机的距离
     double target_rcs_m2;
     double tx_antenna_gain_db;
     double rx_antenna_gain_db;
@@ -117,12 +117,12 @@ inline radar_equation_result bistatic_radar_equation(
     r.noise_power_w  = rx.noise_power_w();
     r.snr_linear = (r.noise_power_w > 0.0) ? r.signal_power_w / r.noise_power_w : 0.0;
     r.snr_db     = (r.snr_linear > 0.0) ? linear_to_db(r.snr_linear) : -999.0;
-    r.max_range_m = 0.0;  // not directly applicable for bistatic
+    r.max_range_m = 0.0;  // 双基地情形下不直接适用
 
     return r;
 }
 
-// SNR with clutter and jamming: SNR = S / (C + J + N)
+// 含杂波和干扰时的信噪比：SNR = S / (C + J + N)
 struct snr_with_interference {
     double signal_power_w  = 0.0;
     double clutter_power_w = 0.0;
@@ -139,18 +139,18 @@ struct snr_with_interference {
         return (s > 0.0) ? linear_to_db(s) : -999.0;
     }
 
-    // Signal-to-clutter ratio
+    // 信杂比
     double scr_db() const {
         return (clutter_power_w > 0.0) ? linear_to_db(signal_power_w / clutter_power_w) : 999.0;
     }
 
-    // Signal-to-jamming ratio
+    // 信干比
     double sjr_db() const {
         return (jamming_power_w > 0.0) ? linear_to_db(signal_power_w / jamming_power_w) : 999.0;
     }
 };
 
-// Detection probability from full radar chain
+// 基于完整雷达链路计算探测概率
 inline double compute_detection_probability(
         const transmitter_params& tx,
         const receiver_params& rx,
@@ -160,7 +160,7 @@ inline double compute_detection_probability(
     return detector.compute_pd(result.snr_linear);
 }
 
-// Range for given Pd
+// 给定 Pd 下的作用距离
 inline double compute_detection_range(
         const transmitter_params& tx,
         const receiver_params& rx,

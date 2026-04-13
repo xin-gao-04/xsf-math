@@ -8,40 +8,40 @@
 
 namespace xsf_math {
 
-// Track state for association
+// 用于关联的航迹状态
 struct track_state {
     int    id = -1;
     vec3   position;
     vec3   velocity;
-    double position_covariance[3] = {100.0, 100.0, 100.0};  // diagonal elements
+    double position_covariance[3] = {100.0, 100.0, 100.0};  // 对角元素
 };
 
-// Detection measurement
+// 检测量测
 struct detection {
     vec3   position;
     double meas_noise[3] = {100.0, 100.0, 100.0};
 };
 
-// Association result
+// 关联结果
 struct association_result {
-    int track_id    = -1;   // -1 means unassociated
+    int track_id    = -1;   // -1 表示未关联
     int detection_idx = -1;
-    double distance = 0.0;  // Mahalanobis or Euclidean distance
+    double distance = 0.0;  // 马氏距离或欧氏距离
 };
 
-// Nearest-neighbor association with gating
+// 带门限的最近邻关联
 struct nearest_neighbor_associator {
 
-    double gate_threshold = 16.0;  // Chi-squared gate (3 DOF, ~99.7% for 16.0)
+    double gate_threshold = 16.0;  // 卡方门限（3 自由度，16.0 约等于 99.7%）
 
-    // Compute Mahalanobis distance between track predicted position and detection
+    // 计算航迹预测位置与量测之间的马氏距离
     static double mahalanobis_distance(const track_state& trk,
                                        const detection& det) {
         double dx = det.position.x - trk.position.x;
         double dy = det.position.y - trk.position.y;
         double dz = det.position.z - trk.position.z;
 
-        // Combined covariance = track_cov + meas_noise (diagonal)
+        // 合成协方差 = 航迹协方差 + 量测噪声（对角）
         double sx = trk.position_covariance[0] + det.meas_noise[0];
         double sy = trk.position_covariance[1] + det.meas_noise[1];
         double sz = trk.position_covariance[2] + det.meas_noise[2];
@@ -53,7 +53,7 @@ struct nearest_neighbor_associator {
         return (dx*dx/sx) + (dy*dy/sy) + (dz*dz/sz);
     }
 
-    // Associate detections to tracks (greedy nearest-neighbor)
+    // 将量测与航迹关联（贪心最近邻）
     std::vector<association_result> associate(
             const std::vector<track_state>& tracks,
             const std::vector<detection>& detections) const {
@@ -85,7 +85,7 @@ struct nearest_neighbor_associator {
             }
         }
 
-        // Report unassociated detections
+        // 输出未关联的量测
         for (size_t d = 0; d < detections.size(); ++d) {
             if (!det_used[d]) {
                 association_result r;
@@ -100,10 +100,10 @@ struct nearest_neighbor_associator {
     }
 };
 
-// M-of-N track confirmation logic
+// M-of-N 航迹确认逻辑
 struct m_of_n_logic {
-    int m = 3;  // required detections
-    int n = 5;  // window size
+    int m = 3;  // 所需命中次数
+    int n = 5;  // 窗口大小
 
     struct state {
         int hits = 0;
@@ -130,9 +130,9 @@ struct m_of_n_logic {
 
 private:
     void trim(state& s) const {
-        // Simple sliding window approximation
+        // 简单滑动窗口近似
         while (s.total > n) {
-            // Assume oldest entry was proportionally hit
+            // 假设最旧条目按比例命中
             double hit_rate = (s.total > 0) ? static_cast<double>(s.hits) / s.total : 0.0;
             if (hit_rate > 0.5 && s.hits > 0) s.hits--;
             s.total--;

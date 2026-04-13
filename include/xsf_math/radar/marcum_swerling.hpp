@@ -6,21 +6,20 @@
 
 namespace xsf_math {
 
-// Marcum-Swerling detection probability calculator
-// Implements Albersheim's approximation for Pd calculation
-// across Swerling cases 0-4 with various detector laws
+// Marcum-Swerling 探测概率计算器
+// 实现 Albersheim 近似，用于在不同检波律下计算 Swerling 0-4 的 Pd
 struct marcum_swerling {
 
     enum class detector_law { linear, square, log };
 
-    // Parameters
+    // 参数
     int          swerling_case            = 0;     // 0-4
     int          num_pulses_integrated    = 1;     // N >= 1
-    double       prob_false_alarm         = 1.0e-6; // Pfa
+    double       prob_false_alarm         = 1.0e-6; // 虚警概率 Pfa
     detector_law law                      = detector_law::linear;
 
-    // Compute detection probability given linear SNR
-    // detection_threshold is linear (not dB). Default ~ 3 dB
+    // 根据线性 SNR 计算探测概率
+    // detection_threshold 为线性值（不是 dB），默认约等于 3 dB
     double compute_pd(double snr_linear,
                       double detection_threshold = 1.9953) const {
         double base, exp;
@@ -35,8 +34,8 @@ struct marcum_swerling {
         return 0.0;
     }
 
-    // Find the SNR (linear) required to achieve a given Pd
-    // Uses bisection search
+    // 找到达到指定 Pd 所需的线性 SNR
+    // 使用二分搜索
     double required_snr(double required_pd) const {
         double pd_clamped = std::clamp(required_pd, 0.002, 0.998);
         double lo = 0.0, hi = 1000.0;
@@ -51,14 +50,14 @@ struct marcum_swerling {
         return 0.5 * (lo + hi);
     }
 
-    // Compute integration gain: ratio of single-pulse to multi-pulse threshold
+    // 计算积分增益：单脉冲阈值与多脉冲阈值之比
     double integration_gain(double required_pd = 0.5) const {
         if (num_pulses_integrated <= 1) return 1.0;
 
-        // Multi-pulse threshold
+        // 多脉冲阈值
         double multi_threshold = required_snr(required_pd);
 
-        // Single-pulse threshold (same detector with N=1)
+        // 单脉冲阈值（同一检波器，N=1）
         marcum_swerling single = *this;
         single.num_pulses_integrated = 1;
         double single_threshold = single.required_snr(required_pd);
@@ -73,7 +72,7 @@ private:
         int    sc  = swerling_case;
         int    n   = num_pulses_integrated;
 
-        // Map cases 2->1 and 4->3 when single pulse
+        // 单脉冲时将 2->1、4->3 进行映射
         if (n == 1) {
             if (sc == 2) sc = 1;
             else if (sc == 4) sc = 3;
@@ -125,18 +124,18 @@ private:
     }
 };
 
-// Albersheim's approximation (alternative, widely used)
-// Returns required SNR in dB for single pulse, given Pd and Pfa
+// Albersheim 近似（另一种常用形式）
+// 根据 Pd 和 Pfa 返回单脉冲所需的 SNR（dB）
 inline double albersheim_snr_db(double pd, double pfa) {
     double A = std::log(0.62 / pfa);
     double B = std::log(pd / (1.0 - pd));
     return -5.0 * std::log10(6.2 + (4.54 / std::sqrt(1.0)) * std::sqrt(A + 0.12 * A * B + 1.7 * B));
 }
 
-// Albersheim with N pulses integrated
+// 带 N 脉冲积累的 Albersheim 近似
 inline double albersheim_snr_db_n(double pd, double pfa, int n_pulses) {
     double snr1 = albersheim_snr_db(pd, pfa);
-    // Integration improvement approximation
+    // 积分增益近似
     double snr_n = snr1 - 10.0 * std::log10(static_cast<double>(n_pulses));
     return snr_n;
 }

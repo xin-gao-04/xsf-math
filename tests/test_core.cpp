@@ -49,46 +49,46 @@ void test_coordinate_transform() {
     printf("  coordinate_transform... ");
     euler_angles zero = {0, 0, 0};
     auto dcm = dcm_wcs_to_ecs(zero);
-    // With zero angles, WCS=ECS (identity)
+    // 当角度为 0 时，WCS=ECS（单位矩阵）
     assert(approx(dcm.m[0][0], 1.0));
     assert(approx(dcm.m[1][1], 1.0));
     assert(approx(dcm.m[2][2], 1.0));
 
-    // 90 deg heading (facing East): North in WCS maps to -Y (left) in ECS
+    // 航向 90 度（朝东）：WCS 中的北向映射到 ECS 的 -Y（左侧）
     euler_angles h90 = {constants::half_pi, 0, 0};
     vec3 north{1, 0, 0};
     auto ecs = wcs_to_ecs(north, h90);
-    assert(approx(ecs.y, -1.0, 1e-5));  // North -> left when heading East
+    assert(approx(ecs.y, -1.0, 1e-5));  // 朝东时，北向 -> 左侧
 
-    // Azimuth/elevation
+    // 方位角/俯仰角
     vec3 ne{1, 1, 0};
     double az = azimuth_from_vec(ne);
-    assert(approx(az, constants::pi / 4.0, 1e-5));  // 45 degrees
+    assert(approx(az, constants::pi / 4.0, 1e-5));  // 45 度
 
-    // Great circle distance
-    lla a = {0, 0, 0}, b = {0, constants::pi / 180.0, 0};  // 1 degree longitude at equator
+    // 大圆距离
+    lla a = {0, 0, 0}, b = {0, constants::pi / 180.0, 0};  // 赤道上经度相差 1 度
     double d = great_circle_distance(a, b);
-    assert(approx_rel(d, 111195.0, 0.01));  // ~111 km
+    assert(approx_rel(d, 111195.0, 0.01));  // 约 111 km
 
     printf("OK\n");
 }
 
 void test_atmosphere() {
     printf("  atmosphere... ");
-    // Sea level
+    // 海平面
     assert(approx_rel(atmosphere::temperature(0), 288.15, 0.001));
     assert(approx_rel(atmosphere::pressure(0), 101325.0, 0.001));
     assert(approx_rel(atmosphere::density(0), 1.225, 0.01));
     assert(approx_rel(atmosphere::sonic_velocity(0), 340.3, 0.01));
 
-    // Tropopause
+    // 对流层顶
     assert(approx_rel(atmosphere::temperature(11000), 216.65, 0.001));
 
-    // Density decreases with altitude
+    // 密度随高度升高而下降
     assert(atmosphere::density(5000) < atmosphere::density(0));
     assert(atmosphere::density(10000) < atmosphere::density(5000));
 
-    // Mach number
+    // 马赫数
     double mach = atmosphere::mach_number(0, 340.3);
     assert(approx_rel(mach, 1.0, 0.01));
 
@@ -124,20 +124,20 @@ void test_kalman_filter() {
     kf.meas_noise[0] = kf.meas_noise[1] = kf.meas_noise[2] = 10.0;
     kf.process_noise[0] = kf.process_noise[1] = kf.process_noise[2] = 0.1;
 
-    // Target moving at constant velocity
+    // 目标以恒定速度运动
     vec3 true_pos = {0, 0, 0};
     vec3 true_vel = {100, 50, -10};
 
     for (int i = 0; i < 50; ++i) {
         double t = i * 0.1;
         vec3 meas = true_pos + true_vel * t;
-        // Add some noise (deterministic for test)
+        // 加入一些噪声（测试中保持确定性）
         meas.x += (i % 5 - 2) * 2.0;
         meas.y += (i % 3 - 1) * 3.0;
         kf.update(t, meas);
     }
 
-    // After 50 updates, velocity estimate should be close
+    // 经过 50 次更新后，速度估计应接近真实值
     vec3 est_vel = kf.velocity();
     assert(approx_rel(est_vel.x, 100.0, 0.1));
     assert(approx_rel(est_vel.y, 50.0, 0.1));

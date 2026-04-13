@@ -9,20 +9,20 @@
 
 namespace xsf_math {
 
-// Probability of Kill (Pk) models
+// 杀伤概率（Pk）模型
 
-// Pk vs miss distance (graduated lethality curve)
+// Pk 随脱靶量变化（分级杀伤曲线）
 struct pk_curve {
-    std::vector<double> miss_distance_m;  // sorted ascending
-    std::vector<double> pk_values;        // corresponding Pk [0,1]
+    std::vector<double> miss_distance_m;  // 升序排列
+    std::vector<double> pk_values;        // 对应的 Pk [0,1]
 
-    // Evaluate Pk for given miss distance
+    // 根据脱靶量评估 Pk
     double evaluate(double miss_dist_m) const {
         if (miss_distance_m.empty()) return 0.0;
         return table_lookup(miss_distance_m, pk_values, std::abs(miss_dist_m));
     }
 
-    // Create typical blast-fragmentation warhead curve
+    // 生成典型的爆破破片战斗部曲线
     static pk_curve blast_fragmentation(double lethal_radius_m, double max_radius_m) {
         pk_curve curve;
         int n = 20;
@@ -32,13 +32,13 @@ struct pk_curve {
 
             double pk;
             if (d <= lethal_radius_m * 0.5) {
-                pk = 1.0;  // certain kill within half lethal radius
+                pk = 1.0;  // 在半个杀伤半径内必杀
             } else if (d <= lethal_radius_m) {
-                // Smooth falloff
+                // 平滑衰减
                 double t = (d - lethal_radius_m * 0.5) / (lethal_radius_m * 0.5);
                 pk = 1.0 - 0.3 * t * t;
             } else {
-                // Exponential decay beyond lethal radius
+                // 超出杀伤半径后指数衰减
                 double excess = (d - lethal_radius_m) / lethal_radius_m;
                 pk = 0.7 * std::exp(-2.0 * excess * excess);
             }
@@ -47,7 +47,7 @@ struct pk_curve {
         return curve;
     }
 
-    // Create continuous rod warhead curve
+    // 生成连续杆战斗部曲线
     static pk_curve continuous_rod(double rod_radius_m) {
         pk_curve curve;
         curve.miss_distance_m = {0.0, rod_radius_m * 0.5, rod_radius_m, rod_radius_m * 1.5, rod_radius_m * 3.0};
@@ -56,23 +56,23 @@ struct pk_curve {
     }
 };
 
-// Kill assessment using miss distance squared (avoids sqrt)
+// 使用脱靶量平方进行杀伤评估（避免开方）
 struct kill_assessment {
-    double lethal_radius_sq_m2;  // lethal radius squared
+    double lethal_radius_sq_m2;  // 杀伤半径平方
 
-    // Quick check: is miss distance within lethal envelope?
+    // 快速检查：脱靶量是否落在杀伤包线内？
     bool within_lethal_envelope(double miss_dist_sq_m2) const {
         return miss_dist_sq_m2 <= lethal_radius_sq_m2;
     }
 };
 
-// Single-shot Pk (SSPK) computation
+// 单发 Pk（SSPK）计算
 inline double single_shot_pk(double miss_distance_m,
                               const pk_curve& curve) {
     return curve.evaluate(miss_distance_m);
 }
 
-// Cumulative Pk for N independent shots
+// N 次独立射击的累计 Pk
 inline double cumulative_pk(const std::vector<double>& individual_pks) {
     double p_survive = 1.0;
     for (double pk : individual_pks) {
@@ -81,26 +81,26 @@ inline double cumulative_pk(const std::vector<double>& individual_pks) {
     return 1.0 - p_survive;
 }
 
-// Monte Carlo kill determination
+// 蒙特卡洛杀伤判定
 struct monte_carlo_kill {
     std::mt19937 rng;
 
     explicit monte_carlo_kill(unsigned seed = 42) : rng(seed) {}
 
-    // Returns true if target is killed
+    // 若目标被杀伤则返回 true
     bool evaluate(double pk) {
         std::uniform_real_distribution<double> dist(0.0, 1.0);
         return dist(rng) < pk;
     }
 
-    // Evaluate with miss distance and Pk curve
+    // 使用脱靶量和 Pk 曲线进行评估
     bool evaluate(double miss_distance_m, const pk_curve& curve) {
         double pk = curve.evaluate(miss_distance_m);
         return evaluate(pk);
     }
 };
 
-// Target vulnerability classification
+// 目标脆弱性分类
 enum class target_class {
     fighter,
     bomber,
@@ -113,7 +113,7 @@ enum class target_class {
     ship
 };
 
-// Typical lethal radius by target class (meters)
+// 各目标类型的典型杀伤半径（米）
 inline double typical_lethal_radius(target_class tc) {
     switch (tc) {
     case target_class::fighter:           return 8.0;
@@ -129,8 +129,8 @@ inline double typical_lethal_radius(target_class tc) {
     }
 }
 
-// EW degradation of Pk
-// Jamming can reduce tracking accuracy -> increase miss distance
+// 电子战对 Pk 的降级
+// 干扰会降低跟踪精度 -> 增大脱靶量
 inline double ew_degraded_miss_distance(double baseline_miss_m,
                                          double track_error_increase_m) {
     return std::sqrt(baseline_miss_m * baseline_miss_m +

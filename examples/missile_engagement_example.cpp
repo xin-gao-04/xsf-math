@@ -6,39 +6,39 @@ using namespace xsf_math;
 int main() {
     printf("=== Missile Engagement Simulation ===\n\n");
 
-    // Target: fighter aircraft at 8km alt, heading east at Mach 0.9
+    // 目标：8km 高度的战斗机，向东飞行，马赫数 0.9
     double target_alt = 8000.0;
     double target_speed = atmosphere::speed_from_mach(target_alt, 0.9);
-    vec3 target_pos = {0, 0, -target_alt};       // NED: z is down
-    vec3 target_vel = {0, target_speed, 0};       // heading east
+    vec3 target_pos = {0, 0, -target_alt};       // NED：z 轴向下
+    vec3 target_vel = {0, target_speed, 0};       // 向东飞行
 
-    // Missile: launched from south, climbing
-    vec3 missile_pos = {-20000, 0, -5000};        // 20km south, 5km alt
+    // 导弹：从南侧发射，爬升中
+    vec3 missile_pos = {-20000, 0, -5000};        // 南侧 20km，海拔 5km
     double missile_speed = atmosphere::speed_from_mach(5000.0, 2.5);
     vec3 missile_vel_dir = (target_pos - missile_pos).normalized();
     vec3 missile_vel = missile_vel_dir * missile_speed;
 
-    // Guidance
+    // 制导
     augmented_proportional_nav apn;
     apn.nav_ratio = 4.0;
 
-    // Aerodynamics
+    // 气动
     aero_2d aero;
     aero.ref_area_m2 = 0.05;
     aero.cl_max = 20.0;
     aero.cd0 = 0.3;
     aero.aspect_ratio = 2.0;
 
-    // Fuze
+    // 引信
     proximity_fuze fuze;
     fuze.trigger_radius_m = 15.0;
     fuze.arm_delay_s = 1.0;
 
-    // Pk curve
+    // 杀伤概率曲线
     auto pk = pk_curve::blast_fragmentation(10.0, 30.0);
 
-    // Simulation
-    double dt = 0.01;  // 10ms timestep
+    // 仿真
+    double dt = 0.01;  // 10ms 时间步长
     double t = 0.0;
     double max_time = 60.0;
 
@@ -56,10 +56,10 @@ int main() {
         double range = geom.slant_range();
         double vc = geom.closing_velocity();
 
-        // Guidance
+        // 制导
         vec3 accel_cmd = apn.compute_accel(geom);
 
-        // Limit acceleration
+        // 限制加速度
         double q = atmosphere::dynamic_pressure(-missile_pos.z, missile_vel.magnitude());
         double max_g = accel_limiter::max_available_g(q, aero.ref_area_m2, aero.cl_max, 150.0);
         accel_limiter limiter;
@@ -68,13 +68,13 @@ int main() {
 
         double accel_g = accel.magnitude() / constants::gravity_mps2;
 
-        // Print every 0.5s
+        // 每 0.5s 输出一次
         if (std::fmod(t, 0.5) < dt) {
             printf("%5.1f    %8.0f  %8.1f  %8.1f  %6.0f\n",
                    t, range, vc, accel_g, -missile_pos.z);
         }
 
-        // Fuze check
+        // 引信检查
         auto fz = fuze.check(t, missile_pos, missile_vel, target_pos, target_vel, dt);
         if (fz == fuze_result::proximity_burst || fz == fuze_result::contact) {
             auto cpa = compute_cpa(missile_pos, missile_vel, target_pos, target_vel);
@@ -100,11 +100,11 @@ int main() {
             break;
         }
 
-        // Integrate
+        // 积分更新
         missile_vel += accel * dt;
         missile_pos += missile_vel * dt;
 
-        // Target moves straight
+        // 目标做直线运动
         target_pos += target_vel * dt;
 
         t += dt;

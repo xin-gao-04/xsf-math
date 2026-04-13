@@ -8,10 +8,10 @@
 
 namespace xsf_math {
 
-// Radar Cross Section (RCS) lookup and modeling
-// Supports frequency-dependent, aspect-angle-dependent, and Swerling fluctuation models
+// 雷达散射截面（RCS）查表与建模
+// 支持频率相关、姿态角相关和 Swerling 起伏模型
 
-// RCS value in m^2 or dBsm
+// 以 m^2 或 dBsm 表示的 RCS 值
 struct rcs_value {
     double m2   = 0.0;
     double dbsm = -999.0;
@@ -24,7 +24,7 @@ struct rcs_value {
     }
 };
 
-// Simple constant RCS model
+// 简单的恒定 RCS 模型
 struct rcs_constant {
     double sigma_m2;
 
@@ -33,13 +33,13 @@ struct rcs_constant {
     }
 };
 
-// Aspect-angle dependent RCS table (azimuth only, single frequency)
+// 姿态角相关 RCS 表（仅方位角，单频）
 struct rcs_table_1d {
-    std::vector<double> azimuths_rad;  // sorted ascending [0, 2*pi]
-    std::vector<double> sigma_dbsm;    // corresponding RCS values
+    std::vector<double> azimuths_rad;  // 升序排列 [0, 2*pi]
+    std::vector<double> sigma_dbsm;    // 对应的 RCS 值
 
     rcs_value evaluate(double az_rad, double /*el_rad*/ = 0.0) const {
-        // Wrap to [0, 2pi]
+        // 归一化到 [0, 2pi]
         double a = std::fmod(az_rad, constants::two_pi);
         if (a < 0) a += constants::two_pi;
         double dbsm = table_lookup(azimuths_rad, sigma_dbsm, a);
@@ -47,7 +47,7 @@ struct rcs_table_1d {
     }
 };
 
-// 2D RCS table: azimuth x elevation
+// 二维 RCS 表：方位角 x 俯仰角
 struct rcs_table_2d {
     std::vector<double> azimuths_rad;
     std::vector<double> elevations_rad;
@@ -61,19 +61,19 @@ struct rcs_table_2d {
     }
 };
 
-// Frequency-dependent RCS: select table based on frequency
+// 频率相关 RCS：按频率选择表
 struct rcs_freq_dependent {
     struct freq_entry {
         double freq_hz;
         rcs_table_1d table;
     };
-    std::vector<freq_entry> entries;  // sorted by freq_hz ascending
+    std::vector<freq_entry> entries;  // 按 freq_hz 升序排列
 
     rcs_value evaluate(double az_rad, double el_rad, double freq_hz) const {
         if (entries.empty()) return rcs_value::from_m2(0.0);
         if (entries.size() == 1) return entries[0].table.evaluate(az_rad, el_rad);
 
-        // Find bracketing frequencies and interpolate in dBsm
+        // 找到夹逼频点并在 dBsm 域插值
         if (freq_hz <= entries.front().freq_hz)
             return entries.front().table.evaluate(az_rad, el_rad);
         if (freq_hz >= entries.back().freq_hz)
@@ -90,19 +90,19 @@ struct rcs_freq_dependent {
     }
 };
 
-// Bistatic RCS approximation using bisector angle
+// 使用角平分线近似双基地 RCS
 // sigma_bi ≈ sigma_mono(bisector_angle)
 // bisector = normalize(unit_tx + unit_rx)
 inline double bistatic_bisector_angle(const vec3& unit_to_tx, const vec3& unit_to_rx) {
     vec3 bisector = (unit_to_tx + unit_to_rx).normalized();
-    return std::acos(clamp(bisector.x, -1.0, 1.0));  // angle from forward (x)
+    return std::acos(clamp(bisector.x, -1.0, 1.0));  // 相对前向（x 轴）的夹角
 }
 
-// RCS frequency regime classification
+// RCS 频率区间分类
 enum class rcs_regime {
-    rayleigh,      // target << wavelength
-    mie,           // target ~ wavelength (resonance)
-    optical        // target >> wavelength
+    rayleigh,      // 目标尺寸 << 波长
+    mie,           // 目标尺寸 ~ 波长（共振）
+    optical        // 目标尺寸 >> 波长
 };
 
 inline rcs_regime classify_regime(double target_size_m, double freq_hz) {
@@ -113,8 +113,8 @@ inline rcs_regime classify_regime(double target_size_m, double freq_hz) {
     return rcs_regime::optical;
 }
 
-// Swerling fluctuation model
-// Applies statistical fluctuation to a mean RCS based on Swerling case
+// Swerling 起伏模型
+// 根据 Swerling 方案对平均 RCS 施加统计起伏
 enum class swerling_case { case0 = 0, case1 = 1, case2 = 2, case3 = 3, case4 = 4 };
 
 } // namespace xsf_math

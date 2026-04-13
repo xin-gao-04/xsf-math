@@ -7,21 +7,21 @@
 
 namespace xsf_math {
 
-// Relative geometry between weapon and target
+// 武器与目标之间的相对几何关系
 struct engagement_geometry {
-    vec3   weapon_pos;       // weapon position (WCS)
-    vec3   weapon_vel;       // weapon velocity (WCS)
-    vec3   target_pos;       // target position (WCS)
-    vec3   target_vel;       // target velocity (WCS)
-    vec3   target_accel;     // target acceleration estimate (WCS), for APN
+    vec3   weapon_pos;       // 武器位置（WCS）
+    vec3   weapon_vel;       // 武器速度（WCS）
+    vec3   target_pos;       // 目标位置（WCS）
+    vec3   target_vel;       // 目标速度（WCS）
+    vec3   target_accel;     // 目标加速度估计（WCS），用于 APN
 
-    // Derived quantities
+    // 派生量
     vec3 relative_pos() const { return target_pos - weapon_pos; }
     vec3 relative_vel() const { return target_vel - weapon_vel; }
 
     double slant_range() const { return relative_pos().magnitude(); }
 
-    // Closing velocity (positive when approaching)
+    // 闭合速度（接近时为正）
     double closing_velocity() const {
         vec3 rp = relative_pos();
         double R = rp.magnitude();
@@ -29,10 +29,10 @@ struct engagement_geometry {
         return -relative_vel().dot(rp) / R;
     }
 
-    // LOS unit vector
+    // 视线单位向量
     vec3 los_unit() const { return relative_pos().normalized(); }
 
-    // LOS angular rate vector: omega = (R x V_rel) / |R|^2
+    // 视线角速度向量：omega = (R x V_rel) / |R|^2
     vec3 los_rate() const {
         vec3 R = relative_pos();
         double R2 = R.magnitude_sq();
@@ -40,20 +40,20 @@ struct engagement_geometry {
         return R.cross(relative_vel()) / R2;
     }
 
-    // Time to intercept estimate (assuming constant closing velocity)
+    // 命中时间估计（假设闭合速度恒定）
     double time_to_intercept() const {
         double vc = closing_velocity();
-        if (vc <= 0.0) return 1e10;  // diverging
+        if (vc <= 0.0) return 1e10;  // 发散
         return slant_range() / vc;
     }
 
-    // Ground range (horizontal distance)
+    // 地面距离（水平距离）
     double ground_range() const {
         vec3 r = relative_pos();
         return std::sqrt(r.x*r.x + r.y*r.y);
     }
 
-    // LOS azimuth and elevation
+    // 视线方位角和俯仰角
     double los_azimuth() const {
         vec3 r = relative_pos();
         return std::atan2(r.y, r.x);
@@ -62,15 +62,15 @@ struct engagement_geometry {
     double los_elevation() const {
         vec3 r = relative_pos();
         double gr = std::sqrt(r.x*r.x + r.y*r.y);
-        return std::atan2(-r.z, gr);  // Z down
+        return std::atan2(-r.z, gr);  // Z 轴向下
     }
 };
 
-// Pure Proportional Navigation (PN)
-// a_cmd = N * V_c * dtheta/dt  (scalar form)
-// a_cmd = N * (omega x V_wpn)   (3D vector form)
+// 纯比例导引（PN）
+// a_cmd = N * V_c * dtheta/dt  （标量形式）
+// a_cmd = N * (omega x V_wpn)   （三维向量形式）
 struct proportional_nav {
-    double nav_ratio = 4.0;  // N (typical 3-5)
+    double nav_ratio = 4.0;  // N（典型取值 3-5）
 
     vec3 compute_accel(const engagement_geometry& geom) const {
         vec3 omega = geom.los_rate();
@@ -79,7 +79,7 @@ struct proportional_nav {
     }
 };
 
-// Augmented Proportional Navigation (APN)
+// 增广比例导引（APN）
 // a_cmd = N * (omega x V_wpn) + (N/2) * a_target
 struct augmented_proportional_nav {
     double nav_ratio = 4.0;
@@ -92,11 +92,11 @@ struct augmented_proportional_nav {
     }
 };
 
-// Pursuit guidance
-// Steers velocity vector toward target current position
+// 追踪导引
+// 将速度向量朝向目标当前方位
 // a_cmd = K * sin(target_offset_angle) * g
 struct pursuit_guidance {
-    double gain = 3.0;  // K (in g's per radian, typical 2-5)
+    double gain = 3.0;  // K（每弧度多少 g，典型 2-5）
 
     vec3 compute_accel(const engagement_geometry& geom) const {
         vec3 aim_dir = geom.relative_pos().normalized();
@@ -105,15 +105,15 @@ struct pursuit_guidance {
 
         if (speed < 1e-10) return {0, 0, 0};
 
-        // Double cross product method (avoids explicit trig):
-        // n = V x AimDir  -> normal to maneuvering plane
-        // lateral = n x V -> lateral direction in plane
+        // 双重叉乘法（避免显式三角函数）：
+        // n = V x AimDir  -> 机动平面的法向量
+        // lateral = n x V -> 平面内的侧向方向
         // |lateral| / |V|^2 = sin(offset_angle)
         vec3 n = vel_dir.cross(aim_dir);
         vec3 lateral = n.cross(vel_dir);
 
         double lateral_mag = lateral.magnitude();
-        // lateral_mag = sin(offset_angle) when both inputs are unit vectors
+        // 当两个输入都是单位向量时，lateral_mag = sin(offset_angle)
 
         if (lateral_mag < 1e-10) return {0, 0, 0};
 
@@ -122,10 +122,10 @@ struct pursuit_guidance {
     }
 };
 
-// Guidance acceleration limiter
-// Constrains command to available aerodynamic capability
+// 制导加速度限幅器
+// 将指令约束到可用气动能力内
 struct accel_limiter {
-    double max_g = 30.0;  // maximum available g-load
+    double max_g = 30.0;  // 最大可用过载
 
     vec3 limit(const vec3& accel_cmd) const {
         double max_accel = max_g * constants::gravity_mps2;
@@ -134,7 +134,7 @@ struct accel_limiter {
         return accel_cmd * (max_accel / mag);
     }
 
-    // Compute max available g given dynamic pressure and missile params
+    // 根据动压和导弹参数计算最大可用过载
     static double max_available_g(double dynamic_pressure_pa,
                                    double ref_area_m2,
                                    double cl_max,
@@ -145,7 +145,7 @@ struct accel_limiter {
     }
 };
 
-// Multi-phase guidance state machine
+// 多阶段制导状态机
 enum class guidance_phase_trigger {
     flight_time,
     altitude,
@@ -162,10 +162,10 @@ enum class guidance_phase_trigger {
 struct phase_transition {
     guidance_phase_trigger trigger;
     double threshold;
-    bool   trigger_above = true;  // true: trigger when value > threshold
+    bool   trigger_above = true;  // true：当数值 > 阈值时触发
 };
 
-// Evaluate whether a phase transition should occur
+// 判断是否应发生阶段切换
 inline bool check_phase_transition(const phase_transition& trans,
                                     const engagement_geometry& geom,
                                     double flight_time,

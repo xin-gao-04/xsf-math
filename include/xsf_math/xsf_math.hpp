@@ -1,9 +1,9 @@
 #pragma once
 
-// XSF-Math: Header-only computation library for defense/aerospace modeling
-// Extracted and decoupled from XSF-Core simulation framework
+// XSF-Math：用于国防/航天建模的头文件库
+// 从 XSF-Core 仿真框架中抽离并解耦
 
-// === Core ===
+// === 核心 ===
 #include "core/constants.hpp"
 #include "core/vec3.hpp"
 #include "core/mat3.hpp"
@@ -12,29 +12,29 @@
 #include "core/atmosphere.hpp"
 #include "core/rcs.hpp"
 
-// === Radar ===
+// === 雷达 ===
 #include "radar/marcum_swerling.hpp"
 #include "radar/antenna.hpp"
 #include "radar/propagation.hpp"
 #include "radar/radar_equation.hpp"
 #include "radar/clutter.hpp"
 
-// === Tracking ===
+// === 跟踪 ===
 #include "tracking/kalman_filter.hpp"
 #include "tracking/track_association.hpp"
 
-// === Guidance ===
+// === 制导 ===
 #include "guidance/proportional_nav.hpp"
 
-// === Aerodynamics ===
+// === 气动 ===
 #include "aero/aerodynamics.hpp"
 
-// === Electronic Warfare ===
+// === 电子战 ===
 #include "ew/electronic_warfare.hpp"
 
-// === Lethality ===
+// === 杀伤效能 ===
 #include "lethality/fuze.hpp"
 #include "lethality/pk_model.hpp"
 
-// === Orbital Mechanics ===
+// === 轨道力学 ===
 #include "orbital/kepler.hpp"
