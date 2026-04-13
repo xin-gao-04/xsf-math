@@ -35,6 +35,7 @@ endif()
 # Install
 install(TARGETS xsf_math EXPORT xsf_math-targets)
 install(DIRECTORY include/xsf_math DESTINATION include)
+install(DIRECTORY include/xsf_behavior DESTINATION include)
 install(EXPORT xsf_math-targets
     NAMESPACE xsf_math::
     DESTINATION lib/cmake/xsf_math

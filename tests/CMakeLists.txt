@@ -10,6 +10,10 @@ add_executable(test_guidance test_guidance.cpp)
 target_link_libraries(test_guidance PRIVATE xsf_math)
 add_test(NAME test_guidance COMMAND test_guidance)
 
+add_executable(test_flight test_flight.cpp)
+target_link_libraries(test_flight PRIVATE xsf_math)
+add_test(NAME test_flight COMMAND test_flight)
+
 add_executable(test_algorithm_io test_algorithm_io.cpp)
 target_link_libraries(test_algorithm_io PRIVATE xsf_math)
 target_compile_definitions(test_algorithm_io PRIVATE TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
