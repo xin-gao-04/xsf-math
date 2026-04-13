@@ -1,0 +1,8 @@
+add_executable(radar_detection_example radar_detection_example.cpp)
+target_link_libraries(radar_detection_example PRIVATE xsf_math)
+
+add_executable(missile_engagement_example missile_engagement_example.cpp)
+target_link_libraries(missile_engagement_example PRIVATE xsf_math)
+
+add_executable(orbital_example orbital_example.cpp)
+target_link_libraries(orbital_example PRIVATE xsf_math)
