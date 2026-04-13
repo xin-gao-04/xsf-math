@@ -83,6 +83,125 @@ void test_descent_controller() {
     printf("OK\n");
 }
 
+// 平飞保持控制器应在高于目标高度时给出轻微低头和向下垂向速度。
+void test_level_hold_controller() {
+    printf("  level_hold_controller... ");
+    auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -3200.0}, {170.0, 0.0, 0.0});
+    state.pitch_rad = 3.0 * constants::deg_to_rad;
+
+    level_hold_target target;
+    target.target_altitude_m = 3000.0;
+
+    flight_control_limits limits;
+    level_hold_controller controller;
+    auto command = controller.compute(state, target, limits, 0.2);
+
+    assert(command.valid);
+    assert(command.commanded_pitch_rad <= state.pitch_rad);
+    assert(command.commanded_vertical_speed_mps <= 0.0);
+    printf("OK\n");
+}
+
+// 航点跟踪控制器应朝航点所在方向输出同号滚转。
+void test_waypoint_track_controller() {
+    printf("  waypoint_track_controller... ");
+    auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -2000.0}, {180.0, 0.0, 0.0});
+    state.heading_rad = 0.0;
+    state.roll_rad = 0.0;
+
+    waypoint_track_target target;
+    target.target_position_wcs = {2000.0, 2000.0, -2000.0};
+
+    flight_control_limits limits;
+    waypoint_track_controller controller;
+    auto command = controller.compute(state, target, limits, 0.2);
+
+    assert(command.valid);
+    assert(command.commanded_roll_rad > 0.0);
+    assert(command.commanded_heading_rate_rad_s > 0.0);
+    printf("OK\n");
+}
+
+// 当航点已进入到达半径时，航点跟踪控制器应返回无效目标状态。
+void test_waypoint_arrival_rejection() {
+    printf("  waypoint_arrival_rejection... ");
+    auto state = flight_kinematic_state::from_velocity({1000.0, 1000.0, -2000.0}, {160.0, 0.0, 0.0});
+
+    waypoint_track_target target;
+    target.target_position_wcs = {1010.0, 1010.0, -2000.0};
+    target.arrive_radius_m = 30.0;
+
+    flight_control_limits limits;
+    waypoint_track_controller controller;
+    auto command = controller.compute(state, target, limits, 0.2);
+
+    assert(!command.valid);
+    assert(command.status == flight_command_status::invalid_target);
+    printf("OK\n");
+}
+
+// 下滑道进近控制器应同时输出朝阈值点对准的转弯指令和向下的垂向修正。
+void test_approach_glideslope_controller() {
+    printf("  approach_glideslope_controller... ");
+    auto state = flight_kinematic_state::from_velocity({0.0, -500.0, -1200.0}, {170.0, 0.0, 0.0});
+    state.heading_rad = 0.0;
+    state.roll_rad = 0.0;
+    state.pitch_rad = 1.0 * constants::deg_to_rad;
+
+    approach_glideslope_target target;
+    target.threshold_position_wcs = {2500.0, 0.0, 0.0};
+
+    flight_control_limits limits;
+    approach_glideslope_controller controller;
+    auto command = controller.compute(state, target, limits, 0.2);
+
+    assert(command.valid);
+    assert(command.commanded_roll_rad > 0.0);
+    assert(command.commanded_heading_rate_rad_s > 0.0);
+    assert(command.commanded_vertical_speed_mps < 0.0);
+    printf("OK\n");
+}
+
+// 定航向保持控制器应把平台拉回目标航向。
+void test_heading_hold_controller() {
+    printf("  heading_hold_controller... ");
+    auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -2000.0}, {180.0, 0.0, 0.0});
+    state.heading_rad = 20.0 * constants::deg_to_rad;
+    state.roll_rad = 0.0;
+
+    heading_hold_target target;
+    target.target_heading_rad = 0.0;
+
+    flight_control_limits limits;
+    heading_hold_controller controller;
+    auto command = controller.compute(state, target, limits, 0.2);
+
+    assert(command.valid);
+    assert(command.commanded_roll_rad < 0.0);
+    assert(command.commanded_heading_rate_rad_s < 0.0);
+    printf("OK\n");
+}
+
+// 拉平控制器应在低高度和较大下沉率下给出抬头与更温和的下降率。
+void test_flare_controller() {
+    printf("  flare_controller... ");
+    auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -8.0}, {75.0, 0.0, 3.0});
+    state.pitch_rad = -2.0 * constants::deg_to_rad;
+
+    flare_target target;
+    target.flare_altitude_m = 15.0;
+    target.target_sink_rate_mps = -0.8;
+
+    flight_control_limits limits;
+    flare_controller controller;
+    auto command = controller.compute(state, target, limits, 0.2);
+
+    assert(command.valid);
+    assert(command.commanded_pitch_rad > state.pitch_rad);
+    assert(command.commanded_vertical_speed_mps > state.vertical_speed_mps);
+    printf("OK\n");
+}
+
 // 控制器输出需要遵守单步速率和姿态限制。
 void test_control_limits() {
     printf("  control_limits... ");
@@ -122,6 +241,12 @@ int main() {
     test_pull_up_controller();
     test_coordinated_turn_controller();
     test_descent_controller();
+    test_level_hold_controller();
+    test_waypoint_track_controller();
+    test_waypoint_arrival_rejection();
+    test_approach_glideslope_controller();
+    test_heading_hold_controller();
+    test_flare_controller();
     test_control_limits();
     test_low_energy_rejection();
     printf("All flight tests passed.\n");

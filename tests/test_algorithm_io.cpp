@@ -188,6 +188,113 @@ int main() {
             assert(command.commanded_pitch_rad > 0.0);
             assert(command.commanded_vertical_speed_mps > 0.0);
             printf("  flight_pull_up... OK\n");
+        } else if (type == "flight_level_hold") {
+            // 文件驱动的平飞保持样例：验证控制器会朝目标高度方向给出小幅垂向修正。
+            auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -parse_double(block, "altitude_m")},
+                                                               {parse_double(block, "speed_mps"), 0.0, 0.0});
+            state.pitch_rad = parse_double(block, "pitch_deg") * constants::deg_to_rad;
+
+            level_hold_target target;
+            target.target_altitude_m = parse_double(block, "target_altitude_m");
+
+            flight_control_limits limits;
+            level_hold_controller controller;
+            auto command = controller.compute(state, target, limits, parse_double(block, "dt_s"));
+
+            double expected_sign = parse_double(block, "expect_vertical_sign");
+            assert(command.valid);
+            assert((expected_sign > 0.0 && command.commanded_vertical_speed_mps > 0.0) ||
+                   (expected_sign < 0.0 && command.commanded_vertical_speed_mps < 0.0));
+            printf("  flight_level_hold... OK\n");
+        } else if (type == "flight_waypoint") {
+            // 文件驱动的航点跟踪样例：验证控制器会朝航点方向输出转向指令。
+            auto state = flight_kinematic_state::from_velocity(
+                {parse_double(block, "position_x_m"), parse_double(block, "position_y_m"), -parse_double(block, "altitude_m")},
+                {parse_double(block, "speed_mps"), 0.0, 0.0});
+            state.heading_rad = parse_double(block, "heading_deg") * constants::deg_to_rad;
+            state.roll_rad = parse_double(block, "roll_deg") * constants::deg_to_rad;
+
+            waypoint_track_target target;
+            target.target_position_wcs = {parse_double(block, "target_x_m"),
+                                          parse_double(block, "target_y_m"),
+                                          -parse_double(block, "altitude_m")};
+
+            flight_control_limits limits;
+            waypoint_track_controller controller;
+            auto command = controller.compute(state, target, limits, parse_double(block, "dt_s"));
+
+            double expected_sign = parse_double(block, "expected_roll_sign");
+            assert(command.valid);
+            assert((expected_sign > 0.0 && command.commanded_roll_rad > 0.0) ||
+                   (expected_sign < 0.0 && command.commanded_roll_rad < 0.0));
+            printf("  flight_waypoint... OK\n");
+        } else if (type == "flight_glideslope") {
+            // 文件驱动的下滑道样例：验证控制器能同时给出横向对准和向下的进近修正。
+            auto state = flight_kinematic_state::from_velocity(
+                {parse_double(block, "position_x_m"), parse_double(block, "position_y_m"), -parse_double(block, "altitude_m")},
+                {parse_double(block, "speed_mps"), 0.0, 0.0});
+            state.heading_rad = parse_double(block, "heading_deg") * constants::deg_to_rad;
+            state.roll_rad = parse_double(block, "roll_deg") * constants::deg_to_rad;
+            state.pitch_rad = parse_double(block, "pitch_deg") * constants::deg_to_rad;
+
+            approach_glideslope_target target;
+            target.threshold_position_wcs = {parse_double(block, "threshold_x_m"),
+                                             parse_double(block, "threshold_y_m"),
+                                             -parse_double(block, "threshold_altitude_m")};
+
+            flight_control_limits limits;
+            approach_glideslope_controller controller;
+            auto command = controller.compute(state, target, limits, parse_double(block, "dt_s"));
+
+            double expected_roll_sign = parse_double(block, "expected_roll_sign");
+            double expected_vertical_sign = parse_double(block, "expect_vertical_sign");
+            assert(command.valid);
+            assert((expected_roll_sign > 0.0 && command.commanded_roll_rad > 0.0) ||
+                   (expected_roll_sign < 0.0 && command.commanded_roll_rad < 0.0));
+            assert((expected_vertical_sign > 0.0 && command.commanded_vertical_speed_mps > 0.0) ||
+                   (expected_vertical_sign < 0.0 && command.commanded_vertical_speed_mps < 0.0));
+            printf("  flight_glideslope... OK\n");
+        } else if (type == "flight_heading_hold") {
+            // 文件驱动的定航向保持样例：验证控制器会把当前航向拉回目标航向。
+            auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -parse_double(block, "altitude_m")},
+                                                               {parse_double(block, "speed_mps"), 0.0, 0.0});
+            state.heading_rad = parse_double(block, "heading_deg") * constants::deg_to_rad;
+            state.roll_rad = parse_double(block, "roll_deg") * constants::deg_to_rad;
+
+            heading_hold_target target;
+            target.target_heading_rad = parse_double(block, "target_heading_deg") * constants::deg_to_rad;
+
+            flight_control_limits limits;
+            heading_hold_controller controller;
+            auto command = controller.compute(state, target, limits, parse_double(block, "dt_s"));
+
+            double expected_sign = parse_double(block, "expected_roll_sign");
+            assert(command.valid);
+            assert((expected_sign > 0.0 && command.commanded_roll_rad > 0.0) ||
+                   (expected_sign < 0.0 && command.commanded_roll_rad < 0.0));
+            printf("  flight_heading_hold... OK\n");
+        } else if (type == "flight_flare") {
+            // 文件驱动的拉平样例：验证控制器会抬头并减小下沉趋势。
+            auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -parse_double(block, "altitude_m")},
+                                                               {parse_double(block, "speed_mps"), 0.0,
+                                                                parse_double(block, "vertical_speed_down_mps")});
+            state.pitch_rad = parse_double(block, "pitch_deg") * constants::deg_to_rad;
+
+            flare_target target;
+
+            flight_control_limits limits;
+            flare_controller controller;
+            auto command = controller.compute(state, target, limits, parse_double(block, "dt_s"));
+
+            double expect_pitch_sign = parse_double(block, "expect_pitch_sign");
+            double expect_vertical_improve = parse_double(block, "expect_vertical_improve");
+            assert(command.valid);
+            assert((expect_pitch_sign > 0.0 && command.commanded_pitch_rad > state.pitch_rad) ||
+                   (expect_pitch_sign < 0.0 && command.commanded_pitch_rad < state.pitch_rad));
+            if (expect_vertical_improve > 0.0) {
+                assert(command.commanded_vertical_speed_mps > state.vertical_speed_mps);
+            }
+            printf("  flight_flare... OK\n");
         } else {
             assert(false && "unknown IO case type");
         }
