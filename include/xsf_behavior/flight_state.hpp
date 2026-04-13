@@ -68,13 +68,17 @@ struct flight_kinematic_state {
 // 行为控制层的统一约束集合。
 // 外部框架可按平台类型、飞行阶段或任务模式提供不同的约束参数。
 struct flight_control_limits {
-    double max_pitch_up_rad         = 30.0 * constants::deg_to_rad;  // 最大抬头角
-    double max_pitch_down_rad       = 20.0 * constants::deg_to_rad;  // 最大低头角
+    double max_pitch_up_rad         = 70.0 * constants::deg_to_rad;  // 对齐 xsf 相位里的最大抬头角
+    double max_pitch_down_rad       = 70.0 * constants::deg_to_rad;  // 对齐 xsf 相位里的最大低头角
     double max_pitch_rate_rad_s     = 10.0 * constants::deg_to_rad;  // 最大俯仰变化率
     double max_roll_angle_rad       = 60.0 * constants::deg_to_rad;  // 最大滚转角
     double max_roll_rate_rad_s      = 30.0 * constants::deg_to_rad;  // 最大滚转变化率
     double max_heading_rate_rad_s   = 6.0 * constants::deg_to_rad;   // 最大航向变化率
-    double max_normal_load_factor_g = 6.0;                           // 最大法向过载
+    double max_normal_load_factor_g = 25.0;                          // 对齐 xsf 的最大指令过载
+    double gee_bias_g               = 1.0;                           // 对齐 xsf 的重力偏置
+    double lateral_gee_bias_g       = 0.0;                           // 对齐 xsf 的横向偏置
+    double max_ascent_rate_mps      = 0.0;                           // 0 表示不限制，语义与 xsf 一致
+    double max_descent_rate_mps     = 0.0;                           // 0 表示不限制，语义与 xsf 一致
     double min_vertical_speed_mps   = -120.0;                        // 允许的最小垂向速度
     double max_vertical_speed_mps   = 120.0;                         // 允许的最大垂向速度
     double min_dynamic_pressure_pa  = 500.0;                         // 控制器生效所需最小动压
@@ -93,14 +97,16 @@ enum class flight_command_status {
 // 行为控制层统一输出。
 // 控制器只表达“控制意图”，具体如何驱动平台由外部框架决定。
 struct flight_control_command {
-    double commanded_pitch_rad            = 0.0;  // 目标俯仰
-    double commanded_roll_rad             = 0.0;  // 目标滚转
-    double commanded_heading_rate_rad_s   = 0.0;  // 目标航向率
-    double commanded_normal_load_factor_g = 1.0;  // 目标法向过载
-    double commanded_vertical_speed_mps   = 0.0;  // 目标垂向速度
-    bool valid                            = true; // false 表示当前条件下不建议执行控制
-    bool saturated                        = false; // true 表示命令被约束裁剪过
-    flight_command_status status          = flight_command_status::ok;
+    double commanded_pitch_rad              = 0.0;  // 目标俯仰
+    double commanded_roll_rad               = 0.0;  // 目标滚转
+    double commanded_heading_rate_rad_s     = 0.0;  // 目标航向率
+    double commanded_normal_load_factor_g   = 0.0;  // 等效法向加速度折算成 g
+    double commanded_vertical_speed_mps     = 0.0;  // 目标垂向速度
+    double commanded_lateral_accel_mps2     = 0.0;  // 对齐 xsf 的 ECS Y 指令加速度语义
+    double commanded_vertical_accel_mps2    = 0.0;  // 对齐 xsf 的 ECS Z 指令加速度语义
+    bool valid                              = true;  // false 表示当前条件下不建议执行控制
+    bool saturated                          = false; // true 表示命令被约束裁剪过
+    flight_command_status status            = flight_command_status::ok;
 };
 
 // 检查当前速度和动压是否足以执行飞行动作控制。
@@ -143,6 +149,11 @@ inline double apply_rate_limit(double current_value,
         return current_value - limit;
     }
     return target_value;
+}
+
+// 返回当前限制下可用的最大指令加速度。
+inline double max_commanded_accel_mps2(const flight_control_limits& limits) {
+    return std::max(limits.max_normal_load_factor_g, 0.0) * constants::gravity_mps2;
 }
 
 } // namespace xsf_math

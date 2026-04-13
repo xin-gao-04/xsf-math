@@ -21,7 +21,7 @@ void test_flight_state() {
     printf("OK\n");
 }
 
-// 拉升控制器应输出正俯仰、正爬升率，并给出不小于 1g 的法向过载。
+// 拉升控制器应输出正俯仰、正爬升率，并给出 xsf 风格的纵向指令加速度。
 void test_pull_up_controller() {
     printf("  pull_up_controller... ");
     auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -1000.0}, {220.0, 0.0, 0.0});
@@ -29,7 +29,6 @@ void test_pull_up_controller() {
 
     pull_up_target target;
     target.target_altitude_m = 3000.0;
-    target.target_climb_angle_rad = 12.0 * constants::deg_to_rad;
 
     flight_control_limits limits;
     pull_up_controller controller;
@@ -38,7 +37,7 @@ void test_pull_up_controller() {
     assert(command.valid);
     assert(command.commanded_pitch_rad > 0.0);
     assert(command.commanded_vertical_speed_mps > 0.0);
-    assert(command.commanded_normal_load_factor_g >= 1.0);
+    assert(command.commanded_vertical_accel_mps2 < 0.0);
     printf("OK\n");
 }
 
@@ -71,7 +70,6 @@ void test_descent_controller() {
 
     descent_target target;
     target.target_altitude_m = 1000.0;
-    target.target_descent_angle_rad = 4.0 * constants::deg_to_rad;
 
     flight_control_limits limits;
     descent_controller controller;
@@ -182,7 +180,7 @@ void test_heading_hold_controller() {
     printf("OK\n");
 }
 
-// 拉平控制器应在低高度和较大下沉率下给出抬头与更温和的下降率。
+// 拉平控制器应在低高度和较大下沉率下给出更温和的下滑角收敛。
 void test_flare_controller() {
     printf("  flare_controller... ");
     auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -8.0}, {75.0, 0.0, 3.0});
@@ -197,7 +195,7 @@ void test_flare_controller() {
     auto command = controller.compute(state, target, limits, 0.2);
 
     assert(command.valid);
-    assert(command.commanded_pitch_rad > state.pitch_rad);
+    assert(command.commanded_pitch_rad >= state.pitch_rad);
     assert(command.commanded_vertical_speed_mps > state.vertical_speed_mps);
     printf("OK\n");
 }

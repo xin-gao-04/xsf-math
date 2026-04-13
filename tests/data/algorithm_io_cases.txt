@@ -51,7 +51,6 @@ altitude_m=1000
 speed_mps=210
 pitch_deg=0
 target_altitude_m=2500
-target_climb_deg=10
 dt_s=0.2
 
 type=flight_level_hold
@@ -104,5 +103,4 @@ speed_mps=75
 vertical_speed_down_mps=3
 pitch_deg=-2
 dt_s=0.2
-expect_pitch_sign=1
 expect_vertical_improve=1

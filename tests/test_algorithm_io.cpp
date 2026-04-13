@@ -171,14 +171,13 @@ int main() {
                    (expected_sign < 0.0 && command.commanded_roll_rad < 0.0));
             printf("  flight_turn... OK\n");
         } else if (type == "flight_pull_up") {
-            // 文件驱动的拉升样例：验证控制器在给定高度差下能输出向上的姿态和爬升意图。
+            // 文件驱动的拉升样例：验证控制器在给定高度差下能输出 xsf 风格的向上机动意图。
             auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -parse_double(block, "altitude_m")},
                                                                {parse_double(block, "speed_mps"), 0.0, 0.0});
             state.pitch_rad = parse_double(block, "pitch_deg") * constants::deg_to_rad;
 
             pull_up_target target;
             target.target_altitude_m = parse_double(block, "target_altitude_m");
-            target.target_climb_angle_rad = parse_double(block, "target_climb_deg") * constants::deg_to_rad;
 
             flight_control_limits limits;
             pull_up_controller controller;
@@ -274,7 +273,7 @@ int main() {
                    (expected_sign < 0.0 && command.commanded_roll_rad < 0.0));
             printf("  flight_heading_hold... OK\n");
         } else if (type == "flight_flare") {
-            // 文件驱动的拉平样例：验证控制器会抬头并减小下沉趋势。
+            // 文件驱动的拉平样例：验证控制器会减小下沉趋势。
             auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -parse_double(block, "altitude_m")},
                                                                {parse_double(block, "speed_mps"), 0.0,
                                                                 parse_double(block, "vertical_speed_down_mps")});
@@ -286,11 +285,8 @@ int main() {
             flare_controller controller;
             auto command = controller.compute(state, target, limits, parse_double(block, "dt_s"));
 
-            double expect_pitch_sign = parse_double(block, "expect_pitch_sign");
             double expect_vertical_improve = parse_double(block, "expect_vertical_improve");
             assert(command.valid);
-            assert((expect_pitch_sign > 0.0 && command.commanded_pitch_rad > state.pitch_rad) ||
-                   (expect_pitch_sign < 0.0 && command.commanded_pitch_rad < state.pitch_rad));
             if (expect_vertical_improve > 0.0) {
                 assert(command.commanded_vertical_speed_mps > state.vertical_speed_mps);
             }
