@@ -35,6 +35,9 @@
 // === 杀伤效能 ===
 #include "lethality/fuze.hpp"
 #include "lethality/pk_model.hpp"
+#include "lethality/launch_pk_table.hpp"
 
 // === 轨道力学 ===
 #include "orbital/kepler.hpp"
+#include "orbital/j2.hpp"
+#include "orbital/maneuvers.hpp"

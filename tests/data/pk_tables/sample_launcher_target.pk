@@ -1,0 +1,10 @@
+Site Platform Type: LAUNCHER_ALPHA
+Target Platform Type: TARGET_BETA
+Length Units: meters
+Speed Units: m/s
+Altitude: 1000
+Speed: 200
+0 1000
+0 0.10 0.20
+10000 0.30 0.40
+
