@@ -70,7 +70,7 @@ struct engagement_geometry {
 // a_cmd = N * V_c * dtheta/dt  （标量形式）
 // a_cmd = N * (omega x V_wpn)   （三维向量形式）
 struct proportional_nav {
-    double nav_ratio = 3.0;  // 对齐 xsf-core Phase::mPN_GainValue 默认值
+    double nav_ratio = 3.0;  // PN 导引比
 
     vec3 compute_accel(const engagement_geometry& geom) const {
         vec3 omega = geom.los_rate();
@@ -87,7 +87,7 @@ struct augmented_proportional_nav {
     vec3 compute_accel(const engagement_geometry& geom) const {
         vec3 omega = geom.los_rate();
         vec3 pn_accel = nav_ratio * omega.cross(geom.weapon_vel);
-        // xsf-core 的增强型 PN 使用 N * (omega x V - 0.5 * a_target)。
+        // 目标加速度以负半系数进入 APN 修正项。
         vec3 aug_term = (-nav_ratio / 2.0) * geom.target_accel;
         return pn_accel + aug_term;
     }
@@ -97,7 +97,7 @@ struct augmented_proportional_nav {
 // 将速度向量朝向目标当前方位
 // a_cmd = K * sin(target_offset_angle) * g
 struct pursuit_guidance {
-    double gain = 10.0;  // 对齐 xsf-core Phase::mVP_GainValue 默认值
+    double gain = 10.0;  // 追踪导引增益
 
     vec3 compute_accel(const engagement_geometry& geom) const {
         vec3 aim_dir = geom.relative_pos().normalized();

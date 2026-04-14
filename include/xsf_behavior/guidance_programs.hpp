@@ -3,14 +3,14 @@
 #include "flight_state.hpp"
 #include <xsf_math/core/coordinate_transform.hpp>
 #include <xsf_math/guidance/proportional_nav.hpp>
+#include <xsf_math/orbital/kepler.hpp>
 #include <algorithm>
 #include <cmath>
 #include <optional>
 
 namespace xsf_math {
 
-// 这一层按 xsf-core 的“guidance program”语义组织，而不是外部适配动作。
-// 它保留程序级流程：LOS 导引、偏置、平滑、飞行路径角/高度覆盖、完成判据。
+// 程序级制导逻辑集合。
 
 enum class guidance_program_status {
     continue_running,
@@ -23,8 +23,8 @@ enum class guidance_pn_method {
 };
 
 struct guidance_program_commands {
-    vec3 accel_cmd_ecs{};           // 对齐 xsf-core 的 ECS 加速度命令
-    vec3 angle_rate_cmd_rad_s{};    // 对齐 xsf-core 的姿态角速率命令
+    vec3 accel_cmd_ecs{};           // ECS 加速度命令
+    vec3 angle_rate_cmd_rad_s{};    // 姿态角速率命令，顺序为 roll/pitch/yaw
     bool saturated = false;         // 是否被相位限制裁剪
 };
 
@@ -53,6 +53,8 @@ struct guidance_phase_options {
 
 struct guidance_program_state {
     flight_kinematic_state vehicle{};
+    euler_angles commanded_attitude{}; // 当前命令姿态
+    bool commanded_attitude_valid = false;
     double sim_time_s = 0.0;
     double current_time_s = 0.0;
     double end_time_s = 0.0;
@@ -84,6 +86,11 @@ struct guidance_program_state {
         return {vehicle.heading_rad, vehicle.pitch_rad, vehicle.roll_rad};
     }
 
+    euler_angles current_commanded_attitude() const {
+        if (commanded_attitude_valid) return commanded_attitude;
+        return attitude();
+    }
+
     vec3 aim_unit_vec_ecs() const {
         return wcs_to_ecs(aim_rel_loc_wcs().normalized(), attitude());
     }
@@ -97,12 +104,25 @@ struct guidance_program_state {
     }
 };
 
+struct attitude_axis_target {
+    std::optional<double> angle_rad;
+    std::optional<double> rate_rad_s;
+    bool body_angle = true;
+};
+
 namespace detail {
 
 inline double sign_of(double magnitude, double reference) {
     if (reference > 0.0) return magnitude;
     if (reference < 0.0) return -magnitude;
     return 0.0;
+}
+
+inline double normalize_axis_angle(int axis, double angle_rad) {
+    if (axis == 1) {
+        return std::clamp(angle_rad, -constants::half_pi, constants::half_pi);
+    }
+    return normalize_angle_pm_pi(angle_rad);
 }
 
 inline double clamp_program_accel(double accel_mps2, const guidance_phase_options& phase, bool& saturated) {
@@ -484,6 +504,312 @@ public:
         result.commands.accel_cmd_ecs.z = 0.0;
         return result;
     }
+};
+
+class attitude_guidance_program {
+public:
+    attitude_axis_target yaw{};
+    attitude_axis_target pitch{};
+    attitude_axis_target roll{};
+    double default_angle_rate_rad_s = 10.0 * constants::deg_to_rad;
+
+    guidance_program_result compute(const guidance_program_state& state) const {
+        guidance_program_result result;
+        const double dt_s = state.step_dt_s();
+        if (dt_s <= 0.0) {
+            result.status = guidance_program_status::complete;
+            return result;
+        }
+
+        const euler_angles current_commanded = state.current_commanded_attitude();
+        const euler_angles current_body = state.attitude();
+        const double current_angle[3] = {current_commanded.roll_rad, current_commanded.pitch_rad, current_commanded.heading_rad};
+        const double base_angle[3] = {current_body.roll_rad, current_body.pitch_rad, current_body.heading_rad};
+
+        const attitude_axis_target* targets[3] = {&roll, &pitch, &yaw};
+        bool continuous_update_needed = false;
+        int angles_tested = 0;
+        int angles_completed = 0;
+        constexpr double completion_tolerance_rad = 0.01 * constants::deg_to_rad;
+
+        for (int axis = 0; axis < 3; ++axis) {
+            const auto& target = *targets[axis];
+            if (target.angle_rad.has_value()) {
+                double requested_angle = *target.angle_rad;
+                if (!target.body_angle) {
+                    requested_angle -= base_angle[axis];
+                    requested_angle = detail::normalize_axis_angle(axis, requested_angle);
+                }
+
+                const double angle_to_go =
+                    detail::normalize_axis_angle(axis, requested_angle - current_angle[axis]);
+                const double configured_rate = target.rate_rad_s.value_or(default_angle_rate_rad_s);
+                const double commanded_rate = std::min(std::abs(angle_to_go) / dt_s, configured_rate);
+                result.commands.angle_rate_cmd_rad_s[axis] = detail::sign_of(commanded_rate, angle_to_go);
+                ++angles_tested;
+                if (std::abs(angle_to_go) <= completion_tolerance_rad) {
+                    ++angles_completed;
+                }
+                if (!target.body_angle) {
+                    continuous_update_needed = true;
+                }
+            } else if (target.rate_rad_s.has_value()) {
+                result.commands.angle_rate_cmd_rad_s[axis] = *target.rate_rad_s;
+                continuous_update_needed = true;
+            }
+        }
+
+        if (!continuous_update_needed && angles_completed == angles_tested) {
+            result.status = guidance_program_status::complete;
+        }
+        return result;
+    }
+};
+
+class flight_path_angle_guidance_program {
+public:
+    std::optional<double> commanded_flight_path_angle_rad;
+    double pitch_rate_rad_s = 0.15 * constants::deg_to_rad;
+    double time_constant_s = 1.0;
+
+    guidance_program_result compute(const guidance_program_state& state,
+                                    const guidance_phase_options& phase) {
+        guidance_program_result result;
+
+        std::optional<double> command_angle = commanded_flight_path_angle_rad;
+        if (!command_angle.has_value()) {
+            command_angle = phase.commanded_flight_path_angle_rad;
+        }
+        if (!command_angle.has_value()) {
+            result.status = guidance_program_status::complete;
+            return result;
+        }
+
+        double commanded_fpa = *command_angle;
+        commanded_fpa = std::clamp(commanded_fpa, -0.99 * constants::half_pi, 0.99 * constants::half_pi);
+        double pitch_delta = commanded_fpa - state.vehicle.flight_path_rad;
+        constexpr double tolerance_rad = 0.0001 * constants::deg_to_rad;
+        pitch_delta += detail::sign_of(tolerance_rad, pitch_delta);
+
+        if (first_execute_call_) {
+            start_time_s_ = state.current_time_s;
+            start_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+            last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+            pitch_down_program_ = (pitch_delta <= 0.0);
+            switch_time_s_ = -1.0;
+            first_execute_call_ = false;
+        }
+
+        const vec3 own_loc = state.vehicle.position_wcs;
+        const double radius_sq = std::max(own_loc.magnitude_sq(), 1.0);
+        const double gravity_mps2 = mu_earth / radius_sq;
+        const double grav_accel_z = gravity_mps2 * std::cos(state.vehicle.flight_path_rad);
+        const double speed = std::max(state.vehicle.true_airspeed_mps, 1.0);
+
+        double cmd_accel_z = 0.0;
+        double pitch_accel_z = 0.0;
+        double pitch_rate_cmd = 0.0;
+
+        if (time_constant_s != 0.0) {
+            if (pitch_down_program_) {
+                if (detail::flight_path_angle_achieved(state.vehicle.flight_path_rad,
+                                                       last_flight_path_angle_rad_,
+                                                       commanded_fpa)) {
+                    result.status = guidance_program_status::complete;
+                    last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+                    return result;
+                }
+
+                if (switch_time_s_ < 0.0) {
+                    double factor = 1.0;
+                    const double elapsed = state.end_time_s - start_time_s_;
+                    if (elapsed < 10.0 * time_constant_s) {
+                        factor = std::max(1.0 - std::exp(-elapsed / time_constant_s), 0.01);
+                    }
+                    pitch_accel_z =
+                        factor * (pitch_rate_rad_s * speed) * detail::sign_of(1.0, -pitch_delta);
+                    cmd_accel_z = pitch_accel_z - grav_accel_z;
+
+                    const double denom = commanded_fpa - start_flight_path_angle_rad_;
+                    double pitch_fraction = 0.0;
+                    if (std::abs(denom) > 1.0e-9) {
+                        pitch_fraction = (state.vehicle.flight_path_rad - start_flight_path_angle_rad_) / denom;
+                    }
+                    if (factor >= 0.98 || pitch_fraction >= 0.5) {
+                        switch_time_s_ = state.current_time_s;
+                        switch_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+                        switch_lateral_acceleration_mps2_ = cmd_accel_z;
+                    }
+                } else {
+                    const double denom = commanded_fpa - switch_flight_path_angle_rad_;
+                    double factor = 0.0;
+                    if (std::abs(denom) > 1.0e-9) {
+                        factor = 1.0 - ((state.vehicle.flight_path_rad - switch_flight_path_angle_rad_) / denom);
+                    }
+                    cmd_accel_z = factor * switch_lateral_acceleration_mps2_;
+                }
+
+                pitch_accel_z = cmd_accel_z + grav_accel_z;
+                pitch_rate_cmd = -pitch_accel_z / speed;
+            } else {
+                if (switch_time_s_ < 0.0) {
+                    double factor = 1.0;
+                    const double elapsed = state.end_time_s - start_time_s_;
+                    if (elapsed < 10.0 * time_constant_s) {
+                        factor = std::max(1.0 - std::exp(-elapsed / time_constant_s), 0.01);
+                    }
+                    pitch_accel_z =
+                        factor * (pitch_rate_rad_s * speed) * detail::sign_of(1.0, -pitch_delta);
+                    cmd_accel_z = pitch_accel_z - grav_accel_z;
+                    if (detail::flight_path_angle_achieved(state.vehicle.flight_path_rad,
+                                                           last_flight_path_angle_rad_,
+                                                           commanded_fpa)) {
+                        switch_time_s_ = state.current_time_s;
+                        switch_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+                        switch_lateral_acceleration_mps2_ = cmd_accel_z;
+                    }
+                } else {
+                    const double factor = 1.0 - ((state.current_time_s - switch_time_s_) / time_constant_s);
+                    if (factor <= 0.0) {
+                        result.status = guidance_program_status::complete;
+                        last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+                        return result;
+                    }
+                    cmd_accel_z = factor * switch_lateral_acceleration_mps2_;
+                    pitch_accel_z = cmd_accel_z + grav_accel_z;
+                }
+                pitch_rate_cmd = -pitch_accel_z / speed;
+            }
+        } else {
+            if (detail::flight_path_angle_achieved(state.vehicle.flight_path_rad,
+                                                   last_flight_path_angle_rad_,
+                                                   commanded_fpa)) {
+                result.status = guidance_program_status::complete;
+                last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+                return result;
+            }
+
+            double end_time = start_time_s_ + (std::abs(start_flight_path_angle_rad_ - commanded_fpa) / pitch_rate_rad_s);
+            double time_to_go = end_time - state.current_time_s;
+            if (time_to_go <= 0.0) {
+                time_to_go = state.step_dt_s();
+            }
+
+            pitch_rate_cmd = pitch_delta / time_to_go;
+            pitch_accel_z = -pitch_rate_cmd * speed;
+            cmd_accel_z = pitch_accel_z - grav_accel_z;
+        }
+
+        result.commands.accel_cmd_ecs.z = cmd_accel_z;
+        result.commands.angle_rate_cmd_rad_s.y = pitch_rate_cmd;
+        detail::limit_program_accel(result.commands, phase);
+        last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+        return result;
+    }
+
+private:
+    double start_time_s_ = 0.0;
+    double start_flight_path_angle_rad_ = 0.0;
+    double last_flight_path_angle_rad_ = 0.0;
+    double switch_time_s_ = -1.0;
+    double switch_flight_path_angle_rad_ = 0.0;
+    double switch_lateral_acceleration_mps2_ = 0.0;
+    bool first_execute_call_ = true;
+    bool pitch_down_program_ = true;
+};
+
+class orbit_insertion_program {
+public:
+    double ascent_gravity_bias = 0.0;
+    double maximum_lateral_acceleration_mps2 = 0.1 * constants::gravity_mps2;
+    double minimum_insertion_altitude_m = 100000.0;
+    double coarse_adjustment_threshold_rad = 0.5 * constants::deg_to_rad;
+    double fine_adjustment_threshold_rad = 0.05 * constants::deg_to_rad;
+
+    guidance_program_result compute(const guidance_program_state& state) {
+        guidance_program_result result;
+        if (orbit_declared_) {
+            return result;
+        }
+
+        if (state.vehicle.altitude_m <= minimum_insertion_altitude_m) {
+            detail::apply_gravity_bias(state, ascent_gravity_bias, result.commands);
+            return result;
+        }
+
+        const double dt_s = std::max(state.step_dt_s(), 1.0e-6);
+        const vec3 vel = state.vehicle.velocity_wcs;
+        const vec3 loc = state.vehicle.position_wcs;
+        const double speed = vel.magnitude();
+        const double radius = std::max(loc.magnitude(), 1.0);
+        const double gravity_mps2 = mu_earth / (radius * radius);
+        const double centripetal_accel_mps2 = (speed * speed) / radius;
+
+        const double cos_loc_vel = std::clamp(loc.dot(vel) / (radius * std::max(speed, 1.0e-9)), -1.0, 1.0);
+        const double flight_path_angle_rad = constants::half_pi - std::acos(cos_loc_vel);
+        const double orbital_speed = std::sqrt(mu_earth / radius);
+        const double speed_fraction = speed / orbital_speed;
+
+        bool orbit_now_declared = false;
+        double gravity_bias = 0.0;
+        double gravity_bias_mod = 0.0;
+
+        if (flight_path_angle_rad > 0.0) {
+            gravity_bias = ascent_gravity_bias;
+            if (flight_path_angle_rad <= coarse_adjustment_threshold_rad) {
+                gravity_bias = 0.0;
+            }
+
+            if (speed_fraction < 1.0) {
+                fine_adjustment_active_ = false;
+                if (flight_path_angle_rad <= fine_adjustment_threshold_rad) {
+                    fine_adjustment_active_ = true;
+                    gravity_bias = (gravity_mps2 - centripetal_accel_mps2) / gravity_mps2;
+                    gravity_bias_mod =
+                        -std::min((flight_path_angle_rad / dt_s) * speed, maximum_lateral_acceleration_mps2) / gravity_mps2;
+                }
+            } else {
+                gravity_bias = 0.0;
+                if (fine_adjustment_active_) {
+                    orbit_now_declared = true;
+                }
+            }
+        } else {
+            if (speed_fraction < 1.0) {
+                fine_adjustment_active_ = false;
+                if (flight_path_angle_rad > -fine_adjustment_threshold_rad) {
+                    fine_adjustment_active_ = true;
+                    gravity_bias = (gravity_mps2 - centripetal_accel_mps2) / gravity_mps2;
+                    gravity_bias_mod =
+                        std::min((-flight_path_angle_rad / dt_s) * speed, maximum_lateral_acceleration_mps2) / gravity_mps2;
+                } else {
+                    gravity_bias = std::min((-flight_path_angle_rad / dt_s) * speed, maximum_lateral_acceleration_mps2) /
+                                   gravity_mps2;
+                }
+            } else {
+                if (fine_adjustment_active_) {
+                    orbit_now_declared = true;
+                    gravity_bias = 0.0;
+                } else {
+                    gravity_bias = std::min((-flight_path_angle_rad / dt_s) * speed, maximum_lateral_acceleration_mps2) /
+                                   gravity_mps2;
+                }
+            }
+        }
+
+        gravity_bias = std::max(gravity_bias + gravity_bias_mod, 0.0);
+        detail::apply_gravity_bias(state, gravity_bias, result.commands);
+        result.commands.saturated = false;
+        if (orbit_now_declared) {
+            orbit_declared_ = true;
+            result.status = guidance_program_status::complete;
+        }
+        return result;
+    }
+
+private:
+    bool fine_adjustment_active_ = false;
+    bool orbit_declared_ = false;
 };
 
 } // namespace xsf_math

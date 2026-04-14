@@ -165,7 +165,6 @@ inline double decoy_effectiveness(double decoy_rcs_m2, double target_rcs_m2,
 }
 
 // 基于参考回波的缩放关系，计算假目标等效 RCS。
-// 该关系直接来自 xsf-core 的 false target 幅度匹配逻辑：
 // sigma_eq = sigma_ref * (SNR_actual / SNR_ref)
 inline double false_target_equivalent_rcs(double actual_snr_linear,
                                           double reference_snr_linear,
@@ -176,7 +175,7 @@ inline double false_target_equivalent_rcs(double actual_snr_linear,
     return reference_rcs_m2 * (actual_snr_linear / reference_snr_linear);
 }
 
-// xsf-core 中假目标位置沿视线方向使用半量程偏置。
+// 假目标位置沿视线方向使用半量程偏置。
 inline double false_target_range_offset(double jammer_to_radar_range_m,
                                         double reference_jammer_to_radar_range_m) {
     return 0.5 * (jammer_to_radar_range_m - reference_jammer_to_radar_range_m);

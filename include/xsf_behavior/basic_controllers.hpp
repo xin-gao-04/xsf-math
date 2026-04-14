@@ -6,10 +6,7 @@
 
 namespace xsf_math {
 
-// 这一批原子控制器尽量贴近 xsf-core 中 GuidanceProgram / GuidanceComputer 的主逻辑：
-// 1. 纵向优先复用“高度制导”和“飞行路径角制导”的推导方式。
-// 2. 横向优先复用“单步航向变化 -> 侧向加速度”的推导方式。
-// 3. 当前行为层仍需要向外部框架输出俯仰/滚转等姿态命令，因此会在最后一步做适配投影。
+// 原子控制器集合。
 
 struct pull_up_target {
     double target_altitude_m = 0.0; // 目标高度
@@ -125,9 +122,9 @@ inline flight_control_command altitude_guidance_command(const flight_kinematic_s
         if (delta_pitch < 0.0) normal_accel = -normal_accel;
     }
 
-    // 与 xsf 的 AltitudeGuidance 一样，引入重力偏置，否则平台会自然下沉。
+    // 引入重力偏置，避免高度保持时出现持续下沉。
     normal_accel += std::cos(cur_fpa) * limits.gee_bias_g * constants::gravity_mps2;
-    double vertical_accel = clamp_accel(-normal_accel, limits, command.saturated); // 对齐 xsf 的 +Z 向下
+    double vertical_accel = clamp_accel(-normal_accel, limits, command.saturated);
 
     double commanded_pitch = clamp_with_flag(commanded_fpa,
                                              -limits.max_pitch_down_rad,
@@ -377,7 +374,7 @@ struct flare_controller {
 
         const double altitude_above_touchdown_m = state.altitude_m - target.touchdown_altitude_m;
         if (altitude_above_touchdown_m > target.flare_altitude_m) {
-            // 拉平尚未触发时，只给出一个较温和的目标下沉率收敛趋势。
+            // 拉平窗口外维持较温和的目标下沉率。
             const double speed = std::max(state.true_airspeed_mps, 1.0);
             const double commanded_fpa = std::asin(std::clamp(target.target_sink_rate_mps / speed, -1.0, 1.0));
             return detail::flight_path_angle_guidance_command(state, commanded_fpa, limits, dt_s);

@@ -1,4 +1,4 @@
-# xsf-core 迁移算法的输入输出回归样例
+# 算法输入输出回归样例
 
 type=launch_pk
 table1=pk_tables/sample_launcher_target.pk

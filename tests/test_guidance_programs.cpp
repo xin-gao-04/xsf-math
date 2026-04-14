@@ -132,6 +132,76 @@ void test_gravity_turn_program() {
     printf("OK\n");
 }
 
+void test_attitude_guidance_program() {
+    printf("  attitude_guidance_program... ");
+    auto state = make_state({0.0, 0.0, -800.0}, {220.0, 0.0, 0.0});
+
+    attitude_guidance_program program;
+    program.yaw.angle_rad = 30.0 * constants::deg_to_rad;
+    program.yaw.body_angle = false;
+    program.default_angle_rate_rad_s = 5.0 * constants::deg_to_rad;
+
+    auto result = program.compute(state);
+    assert(result.status == guidance_program_status::continue_running);
+    assert(result.commands.angle_rate_cmd_rad_s.z > 0.0);
+
+    state.commanded_attitude = {30.0 * constants::deg_to_rad, 0.0, 0.0};
+    state.commanded_attitude_valid = true;
+    auto complete = program.compute(state);
+    assert(complete.status == guidance_program_status::complete);
+    printf("OK\n");
+}
+
+void test_flight_path_angle_guidance_program() {
+    printf("  flight_path_angle_guidance_program... ");
+    auto state = make_state({0.0, 0.0, -500.0}, {250.0, 0.0, 0.0});
+    state.vehicle.flight_path_rad = 0.0;
+
+    flight_path_angle_guidance_program climb_program;
+    climb_program.commanded_flight_path_angle_rad = 5.0 * constants::deg_to_rad;
+    climb_program.pitch_rate_rad_s = 1.0 * constants::deg_to_rad;
+    climb_program.time_constant_s = 0.0;
+
+    auto climb = climb_program.compute(state, guidance_phase_options{});
+    assert(climb.status == guidance_program_status::continue_running);
+    assert(climb.commands.angle_rate_cmd_rad_s.y > 0.0);
+
+    auto descent_state = state;
+    flight_path_angle_guidance_program descent_program;
+    descent_program.commanded_flight_path_angle_rad = -5.0 * constants::deg_to_rad;
+    descent_program.pitch_rate_rad_s = 1.0 * constants::deg_to_rad;
+    descent_program.time_constant_s = 0.0;
+
+    auto descent = descent_program.compute(descent_state, guidance_phase_options{});
+    assert(descent.status == guidance_program_status::continue_running);
+    assert(descent.commands.angle_rate_cmd_rad_s.y < 0.0);
+
+    state.vehicle.flight_path_rad = 5.0 * constants::deg_to_rad;
+    auto complete = climb_program.compute(state, guidance_phase_options{});
+    assert(complete.status == guidance_program_status::complete);
+    printf("OK\n");
+}
+
+void test_orbit_insertion_program() {
+    printf("  orbit_insertion_program... ");
+    const double radius = constants::earth_radius_m + 400000.0;
+    const double orbital_speed = std::sqrt(mu_earth / radius);
+
+    auto under_speed_state = make_state({radius, 0.0, 0.0}, {0.0, 0.99 * orbital_speed, 0.0});
+    under_speed_state.vehicle.altitude_m = 400000.0;
+
+    auto over_speed_state = make_state({radius, 0.0, 0.0}, {0.0, 1.01 * orbital_speed, 0.0});
+    over_speed_state.vehicle.altitude_m = 400000.0;
+
+    orbit_insertion_program program;
+    auto first = program.compute(under_speed_state);
+    assert(first.status == guidance_program_status::continue_running);
+
+    auto second = program.compute(over_speed_state);
+    assert(second.status == guidance_program_status::complete);
+    printf("OK\n");
+}
+
 int main() {
     printf("=== Guidance Program Tests ===\n");
     test_legacy_program_guidance_and_bias();
@@ -140,6 +210,9 @@ int main() {
     test_legacy_flight_path_angle_program();
     test_gravity_bias_program();
     test_gravity_turn_program();
+    test_attitude_guidance_program();
+    test_flight_path_angle_guidance_program();
+    test_orbit_insertion_program();
     printf("All guidance program tests passed.\n");
     return 0;
 }

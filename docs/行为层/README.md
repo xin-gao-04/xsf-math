@@ -2,7 +2,7 @@
 
 行为层对应 `include/xsf_behavior/`，现在分成两个逻辑子层：
 
-- 原生制导程序层：尽量按 `xsf-core` 的 `GuidanceProgram` 语义提取
+- 原生制导程序层：按程序执行顺序组织的制导程序集合
 - 原子控制器层：面向外部框架直接托管的轻量动作控制器
 
 ## 设计目标
@@ -18,7 +18,7 @@
 
 对应 `include/xsf_behavior/guidance_programs.hpp`。
 
-当前已迁入的第一批程序：
+当前已迁入的程序：
 
 - `legacy_guidance_program`
 - `altitude_guidance_program`
@@ -26,6 +26,9 @@
 - `legacy_flight_path_angle_program`
 - `gravity_bias_program`
 - `gravity_turn_program`
+- `attitude_guidance_program`
+- `flight_path_angle_guidance_program`
+- `orbit_insertion_program`
 
 ### 2. 原子控制器层
 
@@ -40,7 +43,7 @@
 - `heading_hold_controller`
 - `flare_controller`
 
-## 推荐阅读
+## 阅读路径
 
 1. `原生制导程序层.md`
 2. `原子控制器总览.md`
@@ -59,7 +62,7 @@
 - 动作目标结构
 - 动作约束结构
 - 动作输出命令
-- 原子控制器之间的推荐工作流
+- 原子控制器之间的工作流
 
 算法层的详细解释见：
 

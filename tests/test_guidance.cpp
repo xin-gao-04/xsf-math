@@ -74,7 +74,7 @@ void test_augmented_pn() {
     pn.nav_ratio = 4.0;
     vec3 a_pn = pn.compute_accel(g);
 
-    // xsf-core 的 APN 使用负半目标加速度项，这里直接校验公式符号。
+    // APN 使用负半目标加速度项，直接校验公式符号。
     vec3 expected = a_pn + (-apn.nav_ratio / 2.0) * g.target_accel;
     assert(approx_rel(a_apn.x, expected.x, 0.001));
     assert(approx_rel(a_apn.y, expected.y, 0.001));
