@@ -14,7 +14,8 @@
 ## 公开入口
 
 - 聚合入口：`#include <xsf_math/xsf_math.hpp>`
-- 精确入口：按模块包含 `core/`、`radar/`、`tracking/`、`guidance/`、`aero/`、`ew/`、`lethality/`、`orbital/`
+- 业务域入口：按业务域包含 `domains/foundation.hpp`、`domains/perception.hpp`、`domains/tracking.hpp`、`domains/engagement.hpp`、`domains/flight_dynamics.hpp`、`domains/electronic_warfare.hpp`、`domains/orbital_dynamics.hpp`
+- 技术模块入口：按模块包含 `core/`、`radar/`、`tracking/`、`guidance/`、`aero/`、`ew/`、`lethality/`、`orbital/`
 
 ## 算法层的核心逻辑
 
@@ -71,7 +72,24 @@
 
 这也是算法层需要详细文档的原因：重点不是“某个函数怎么调”，而是“这些模块为什么要这样配合”。
 
-## 模块总览
+## 业务域总览
+
+- `基础支撑`
+  对应 `domains/foundation.hpp`，统一常量、向量/矩阵、插值、坐标变换和大气基础量。
+- `感知与探测`
+  对应 `domains/perception.hpp`，统一 RCS、传播、天线、雷达方程、杂波和统计检测。
+- `跟踪估计`
+  对应 `domains/tracking.hpp`，统一滤波与关联。
+- `交战与杀伤`
+  对应 `domains/engagement.hpp`，统一导引、引信、Pk 和发射杀伤概率表。
+- `飞行与气动`
+  对应 `domains/flight_dynamics.hpp`，统一大气与气动能力计算。
+- `电子战`
+  对应 `domains/electronic_warfare.hpp`，统一干扰、诱饵和干信比退化。
+- `轨道动力学`
+  对应 `domains/orbital_dynamics.hpp`，统一开普勒传播、J2 摄动和常见轨道机动。
+
+## 技术模块总览
 
 - `core`
   常量、向量/矩阵、插值、坐标变换、大气和 RCS 基础表达。
@@ -94,10 +112,10 @@
 
 1. `模块依赖图谱.md`
 2. `算法链路与逻辑详解.md`
-3. `专题知识/坐标系统与变换.md`
-4. `专题知识/雷达信号处理.md`
-5. `专题知识/比例导引.md`
-6. `专题知识/轨道力学.md`
+3. `基础支撑/README.md`
+4. `感知与探测/README.md`
+5. `交战与杀伤/README.md`
+6. `轨道动力学/README.md`
 
 ## 与行为层的边界
 

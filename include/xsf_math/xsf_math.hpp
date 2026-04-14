@@ -1,50 +1,22 @@
 #pragma once
 
 // XSF-Math：用于国防/航天建模的头文件库。
-// `core/radar/tracking/guidance/aero/ew/lethality/orbital`
-// 侧重公式、模型和数值计算。
+// 算法层同时保留两套入口：
+// 1. `core/radar/tracking/guidance/aero/ew/lethality/orbital`
+//    技术模块视图。
+// 2. `domains/*`
+//    按业务链路组织的业务域视图。
 // `xsf_behavior`
 // 当前仅包含飞行相关行为子域，侧重输出可被外部框架消费的控制命令。
 
-// === 数学算法层：核心 ===
-#include "core/constants.hpp"
-#include "core/vec3.hpp"
-#include "core/mat3.hpp"
-#include "core/interpolation.hpp"
-#include "core/coordinate_transform.hpp"
-#include "core/atmosphere.hpp"
-#include "core/rcs.hpp"
-
-// === 数学算法层：雷达 ===
-#include "radar/marcum_swerling.hpp"
-#include "radar/antenna.hpp"
-#include "radar/propagation.hpp"
-#include "radar/radar_equation.hpp"
-#include "radar/clutter.hpp"
-
-// === 数学算法层：跟踪 ===
-#include "tracking/kalman_filter.hpp"
-#include "tracking/track_association.hpp"
-
-// === 数学算法层：制导 ===
-#include "guidance/proportional_nav.hpp"
+// === 数学算法层：业务域入口 ===
+#include "domains/foundation.hpp"
+#include "domains/perception.hpp"
+#include "domains/tracking.hpp"
+#include "domains/engagement.hpp"
+#include "domains/flight_dynamics.hpp"
+#include "domains/electronic_warfare.hpp"
+#include "domains/orbital_dynamics.hpp"
 
 // === 行为控制层：飞行动作 ===
-// 基于上面的数学算法和气动/大气状态，输出俯仰、滚转、过载等控制指令。
 #include <xsf_behavior/xsf_behavior.hpp>
-
-// === 数学算法层：气动 ===
-#include "aero/aerodynamics.hpp"
-
-// === 数学算法层：电子战 ===
-#include "ew/electronic_warfare.hpp"
-
-// === 数学算法层：杀伤效能 ===
-#include "lethality/fuze.hpp"
-#include "lethality/pk_model.hpp"
-#include "lethality/launch_pk_table.hpp"
-
-// === 数学算法层：轨道力学 ===
-#include "orbital/kepler.hpp"
-#include "orbital/j2.hpp"
-#include "orbital/maneuvers.hpp"
