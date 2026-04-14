@@ -10,6 +10,10 @@ add_executable(test_guidance test_guidance.cpp)
 target_link_libraries(test_guidance PRIVATE xsf_math)
 add_test(NAME test_guidance COMMAND test_guidance)
 
+add_executable(test_guidance_programs test_guidance_programs.cpp)
+target_link_libraries(test_guidance_programs PRIVATE xsf_math)
+add_test(NAME test_guidance_programs COMMAND test_guidance_programs)
+
 add_executable(test_flight test_flight.cpp)
 target_link_libraries(test_flight PRIVATE xsf_math)
 add_test(NAME test_flight COMMAND test_flight)

@@ -1,6 +1,9 @@
 # 行为层文档索引
 
-行为层对应 `include/xsf_behavior/`，负责把 `xsf-math` 的公式和物理计算组织成可托管给外部仿真框架的原子动作控制器。
+行为层对应 `include/xsf_behavior/`，现在分成两个逻辑子层：
+
+- 原生制导程序层：尽量按 `xsf-core` 的 `GuidanceProgram` 语义提取
+- 原子控制器层：面向外部框架直接托管的轻量动作控制器
 
 ## 设计目标
 
@@ -9,7 +12,24 @@
 - 不维护实体生命周期
 - 只输出俯仰、滚转、航向率、垂向速度、过载等控制意图
 
-## 当前控制器集合
+## 当前层级
+
+### 1. 原生制导程序层
+
+对应 `include/xsf_behavior/guidance_programs.hpp`。
+
+当前已迁入的第一批程序：
+
+- `legacy_guidance_program`
+- `altitude_guidance_program`
+- `intercept_guidance_program`
+- `legacy_flight_path_angle_program`
+- `gravity_bias_program`
+- `gravity_turn_program`
+
+### 2. 原子控制器层
+
+对应 `include/xsf_behavior/basic_controllers.hpp`。
 
 - `pull_up_controller`
 - `coordinated_turn_controller`
@@ -22,8 +42,9 @@
 
 ## 推荐阅读
 
-1. `原子控制器总览.md`
-2. `飞行行为工作流.md`
+1. `原生制导程序层.md`
+2. `原子控制器总览.md`
+3. `飞行行为工作流.md`
 
 ## 与算法层的边界
 

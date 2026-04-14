@@ -5,3 +5,4 @@
 
 #include "flight_state.hpp"
 #include "basic_controllers.hpp"
+#include "guidance_programs.hpp"
