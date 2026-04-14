@@ -4,7 +4,7 @@
 // `core/radar/tracking/guidance/aero/ew/lethality/orbital`
 // 侧重公式、模型和数值计算。
 // `xsf_behavior`
-// 侧重输出可被外部框架消费的控制命令。
+// 当前仅包含飞行相关行为子域，侧重输出可被外部框架消费的控制命令。
 
 // === 数学算法层：核心 ===
 #include "core/constants.hpp"

@@ -1,9 +1,13 @@
 # 行为层文档索引
 
-行为层对应 `include/xsf_behavior/`，现在分成两个逻辑子层：
+行为层对应 `include/xsf_behavior/`。
 
-- 原生制导程序层：按程序执行顺序组织的制导程序集合
-- 原子控制器层：面向外部框架直接托管的轻量动作控制器
+当前目录只包含一个已落地子域：
+
+- `飞行/`
+  飞行相关行为，包括飞行状态、原子控制器和原生程序层。
+
+其他行为子域，例如导弹制导行为、雷达探测行为、传感器管理行为，当前尚未进入行为层目录。
 
 ## 设计目标
 
@@ -12,11 +16,11 @@
 - 不维护实体生命周期
 - 只输出俯仰、滚转、航向率、垂向速度、过载等控制意图
 
-## 当前层级
+## 当前已实现范围
 
-### 1. 原生制导程序层
+### 1. 飞行原生程序层
 
-对应 `include/xsf_behavior/guidance_programs.hpp`。
+对应 `include/xsf_behavior/flight/guidance_programs.hpp`。
 
 当前已迁入的程序：
 
@@ -30,9 +34,9 @@
 - `flight_path_angle_guidance_program`
 - `orbit_insertion_program`
 
-### 2. 原子控制器层
+### 2. 飞行原子控制器层
 
-对应 `include/xsf_behavior/basic_controllers.hpp`。
+对应 `include/xsf_behavior/flight/basic_controllers.hpp`。
 
 - `pull_up_controller`
 - `coordinated_turn_controller`
@@ -45,9 +49,11 @@
 
 ## 阅读路径
 
-1. `原生制导程序层.md`
-2. `原子控制器总览.md`
-3. `飞行行为工作流.md`
+1. `飞行/README.md`
+2. `飞行/飞行器飞行心智模型.md`
+3. `飞行/原生制导程序层.md`
+4. `飞行/原子控制器总览.md`
+5. `飞行/飞行行为工作流.md`
 
 ## 与算法层的边界
 
@@ -62,7 +68,7 @@
 - 动作目标结构
 - 动作约束结构
 - 动作输出命令
-- 原子控制器之间的工作流
+- 飞行原子控制器之间的工作流
 
 算法层的详细解释见：
 
