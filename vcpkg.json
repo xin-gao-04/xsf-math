@@ -1,0 +1,8 @@
+{
+  "name": "xsf-math",
+  "version": "0.1.0",
+  "description": "Header-only math/simulation library for defense and space modeling",
+  "dependencies": [
+    "spdlog"
+  ]
+}

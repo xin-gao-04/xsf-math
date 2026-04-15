@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flight_state.hpp"
+#include <xsf_common/log.hpp>
 #include <xsf_math/core/coordinate_transform.hpp>
 #include <xsf_math/guidance/proportional_nav.hpp>
 #include <xsf_math/orbital/kepler.hpp>
@@ -385,6 +386,11 @@ public:
 
         detail::apply_lateral_bias(phase.lateral_gee_bias, result.commands);
         detail::limit_program_accel(result.commands, phase);
+        XSF_LOG_DEBUG("legacy guidance: aim_valid={} ay={:.3f} az={:.3f} sat={}",
+                      state.aimpoint_is_valid,
+                      result.commands.accel_cmd_ecs.y,
+                      result.commands.accel_cmd_ecs.z,
+                      result.commands.saturated);
         return result;
     }
 
@@ -409,6 +415,11 @@ public:
             detail::altitude_guidance(state, phase, result.commands, *phase.commanded_altitude_m);
         }
         detail::limit_program_accel(result.commands, phase);
+        XSF_LOG_DEBUG("altitude program: cmd_alt={} ay={:.3f} az={:.3f} sat={}",
+                      phase.commanded_altitude_m.value_or(0.0),
+                      result.commands.accel_cmd_ecs.y,
+                      result.commands.accel_cmd_ecs.z,
+                      result.commands.saturated);
         return result;
     }
 };
@@ -447,6 +458,11 @@ public:
         }
 
         detail::limit_program_accel(result.commands, phase);
+        XSF_LOG_DEBUG("intercept program: pursuit={} ay={:.3f} az={:.3f} sat={}",
+                      use_pursuit,
+                      result.commands.accel_cmd_ecs.y,
+                      result.commands.accel_cmd_ecs.z,
+                      result.commands.saturated);
         return result;
     }
 };
@@ -476,6 +492,10 @@ public:
         }
 
         last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+        XSF_LOG_DEBUG("legacy FPA program: cmd_gamma={:.4f} current_gamma={:.4f} status={}",
+                      *command_angle,
+                      state.vehicle.flight_path_rad,
+                      result.status == guidance_program_status::complete ? "complete" : "running");
         return result;
     }
 
@@ -492,6 +512,10 @@ public:
         guidance_program_result result;
         detail::apply_gravity_bias(state, gravity_bias_factor.value_or(phase.gee_bias), result.commands);
         detail::limit_program_accel(result.commands, phase);
+        XSF_LOG_TRACE("gravity bias program: bias={:.3f} ay={:.3f} az={:.3f}",
+                      gravity_bias_factor.value_or(phase.gee_bias),
+                      result.commands.accel_cmd_ecs.y,
+                      result.commands.accel_cmd_ecs.z);
         return result;
     }
 };
@@ -562,6 +586,11 @@ public:
         if (!continuous_update_needed && angles_completed == angles_tested) {
             result.status = guidance_program_status::complete;
         }
+        XSF_LOG_DEBUG("attitude program: roll_rate={:.4f} pitch_rate={:.4f} yaw_rate={:.4f} status={}",
+                      result.commands.angle_rate_cmd_rad_s.x,
+                      result.commands.angle_rate_cmd_rad_s.y,
+                      result.commands.angle_rate_cmd_rad_s.z,
+                      result.status == guidance_program_status::complete ? "complete" : "running");
         return result;
     }
 };
@@ -704,6 +733,12 @@ public:
         result.commands.angle_rate_cmd_rad_s.y = pitch_rate_cmd;
         detail::limit_program_accel(result.commands, phase);
         last_flight_path_angle_rad_ = state.vehicle.flight_path_rad;
+        XSF_LOG_DEBUG("FPA program: cmd_gamma={:.4f} current_gamma={:.4f} az={:.3f} pitch_rate={:.4f} status={}",
+                      commanded_fpa,
+                      state.vehicle.flight_path_rad,
+                      result.commands.accel_cmd_ecs.z,
+                      result.commands.angle_rate_cmd_rad_s.y,
+                      result.status == guidance_program_status::complete ? "complete" : "running");
         return result;
     }
 
@@ -804,6 +839,12 @@ public:
             orbit_declared_ = true;
             result.status = guidance_program_status::complete;
         }
+        XSF_LOG_INFO("orbit insertion: alt={:.1f}m speed_frac={:.4f} fpa={:.6f}rad bias={:.4f} status={}",
+                     state.vehicle.altitude_m,
+                     speed_fraction,
+                     flight_path_angle_rad,
+                     gravity_bias,
+                     result.status == guidance_program_status::complete ? "complete" : "running");
         return result;
     }
 

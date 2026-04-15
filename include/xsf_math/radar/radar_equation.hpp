@@ -4,6 +4,7 @@
 #include "propagation.hpp"
 #include "antenna.hpp"
 #include "marcum_swerling.hpp"
+#include <xsf_common/log.hpp>
 #include <cmath>
 
 namespace xsf_math {
@@ -83,6 +84,13 @@ inline radar_equation_result monostatic_radar_equation(
     double max_R4 = numerator / (four_pi_cubed * L * r.noise_power_w);
     r.max_range_m = (max_R4 > 0.0) ? std::pow(max_R4, 0.25) : 0.0;
 
+    XSF_LOG_TRACE("monostatic radar: R={:.0f}m sigma={:.3f}m^2 Pr={:.3e}W Pn={:.3e}W SNR={:.2f}dB",
+                  geom.range_m,
+                  geom.target_rcs_m2,
+                  r.signal_power_w,
+                  r.noise_power_w,
+                  r.snr_db);
+
     return r;
 }
 
@@ -118,6 +126,13 @@ inline radar_equation_result bistatic_radar_equation(
     r.snr_linear = (r.noise_power_w > 0.0) ? r.signal_power_w / r.noise_power_w : 0.0;
     r.snr_db     = (r.snr_linear > 0.0) ? linear_to_db(r.snr_linear) : -999.0;
     r.max_range_m = 0.0;  // 双基地情形下不直接适用
+
+    XSF_LOG_TRACE("bistatic radar: Rt={:.0f}m Rr={:.0f}m sigma={:.3f}m^2 Pr={:.3e}W SNR={:.2f}dB",
+                  geom.range_tx_m,
+                  geom.range_rx_m,
+                  geom.target_rcs_m2,
+                  r.signal_power_w,
+                  r.snr_db);
 
     return r;
 }
@@ -157,7 +172,12 @@ inline double compute_detection_probability(
         const radar_geometry& geom,
         const marcum_swerling& detector) {
     auto result = monostatic_radar_equation(tx, rx, geom);
-    return detector.compute_pd(result.snr_linear);
+    const double pd = detector.compute_pd(result.snr_linear);
+    XSF_LOG_DEBUG("detection probability: R={:.0f}m SNR={:.2f}dB Pd={:.4f}",
+                  geom.range_m,
+                  result.snr_db,
+                  pd);
+    return pd;
 }
 
 // 给定 Pd 下的作用距离
@@ -180,8 +200,14 @@ inline double compute_detection_range(
 
     double numerator = tx.peak_power_w * G * G * lambda * lambda * target_rcs_m2;
     double denominator = four_pi_cubed * L * N * required_snr;
-
-    return (denominator > 0.0) ? std::pow(numerator / denominator, 0.25) : 0.0;
+    const double detection_range_m =
+        (denominator > 0.0) ? std::pow(numerator / denominator, 0.25) : 0.0;
+    XSF_LOG_DEBUG("detection range: sigma={:.3f}m^2 required Pd={:.3f} required SNR={:.2f}dB range={:.0f}m",
+                  target_rcs_m2,
+                  required_pd,
+                  linear_to_db(required_snr),
+                  detection_range_m);
+    return detection_range_m;
 }
 
 } // namespace xsf_math

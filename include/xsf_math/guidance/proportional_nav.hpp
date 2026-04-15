@@ -2,6 +2,7 @@
 
 #include "../core/vec3.hpp"
 #include "../core/constants.hpp"
+#include <xsf_common/log.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -75,6 +76,12 @@ struct proportional_nav {
     vec3 compute_accel(const engagement_geometry& geom) const {
         vec3 omega = geom.los_rate();
         vec3 accel = nav_ratio * omega.cross(geom.weapon_vel);
+        XSF_LOG_TRACE("PN: N={:.2f} range={:.1f}m Vc={:.1f}m/s |omega|={:.6f}rad/s |a|={:.3f}m/s^2",
+                      nav_ratio,
+                      geom.slant_range(),
+                      geom.closing_velocity(),
+                      omega.magnitude(),
+                      accel.magnitude());
         return accel;
     }
 };
@@ -89,7 +96,15 @@ struct augmented_proportional_nav {
         vec3 pn_accel = nav_ratio * omega.cross(geom.weapon_vel);
         // 目标加速度以负半系数进入 APN 修正项。
         vec3 aug_term = (-nav_ratio / 2.0) * geom.target_accel;
-        return pn_accel + aug_term;
+        vec3 accel = pn_accel + aug_term;
+        XSF_LOG_TRACE("APN: N={:.2f} range={:.1f}m Vc={:.1f}m/s |pn|={:.3f}m/s^2 |aug|={:.3f}m/s^2 |a|={:.3f}m/s^2",
+                      nav_ratio,
+                      geom.slant_range(),
+                      geom.closing_velocity(),
+                      pn_accel.magnitude(),
+                      aug_term.magnitude(),
+                      accel.magnitude());
+        return accel;
     }
 };
 
@@ -119,6 +134,11 @@ struct pursuit_guidance {
         if (lateral_mag < 1e-10) return {0, 0, 0};
 
         vec3 accel = lateral.normalized() * (gain * constants::gravity_mps2 * lateral_mag);
+        XSF_LOG_TRACE("pursuit: gain={:.2f} range={:.1f}m offset={:.6f} |a|={:.3f}m/s^2",
+                      gain,
+                      geom.slant_range(),
+                      lateral_mag,
+                      accel.magnitude());
         return accel;
     }
 };
@@ -132,7 +152,12 @@ struct accel_limiter {
         double max_accel = max_g * constants::gravity_mps2;
         double mag = accel_cmd.magnitude();
         if (mag <= max_accel) return accel_cmd;
-        return accel_cmd * (max_accel / mag);
+        vec3 limited = accel_cmd * (max_accel / mag);
+        XSF_LOG_DEBUG("accel limited: |cmd|={:.3f}m/s^2 limit={:.3f}m/s^2 max_g={:.2f}",
+                      mag,
+                      max_accel,
+                      max_g);
+        return limited;
     }
 
     // 根据动压和导弹参数计算最大可用过载

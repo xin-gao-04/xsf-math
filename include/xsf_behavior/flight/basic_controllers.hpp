@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flight_state.hpp"
+#include <xsf_common/log.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -61,6 +62,11 @@ inline flight_control_command make_unavailable_command(const flight_kinematic_st
     command.status = (state.true_airspeed_mps < limits.min_speed_mps)
                          ? flight_command_status::speed_limited
                          : flight_command_status::dynamic_pressure_limited;
+    XSF_LOG_DEBUG("flight controls unavailable: TAS={:.2f}m/s q={:.2f}Pa min_speed={:.2f}m/s min_q={:.2f}Pa",
+                  state.true_airspeed_mps,
+                  state.dynamic_pressure_pa,
+                  limits.min_speed_mps,
+                  limits.min_dynamic_pressure_pa);
     return command;
 }
 
@@ -144,6 +150,13 @@ inline flight_control_command altitude_guidance_command(const flight_kinematic_s
                         command.saturated);
     command.commanded_vertical_accel_mps2 = vertical_accel;
     command.commanded_normal_load_factor_g = std::abs(vertical_accel) / constants::gravity_mps2;
+    XSF_LOG_TRACE("altitude guidance: alt={:.1f}m cmd_alt={:.1f}m pitch={:.3f}rad vz={:.3f}m/s az={:.3f}m/s^2 sat={}",
+                  state.altitude_m,
+                  commanded_altitude_m,
+                  command.commanded_pitch_rad,
+                  command.commanded_vertical_speed_mps,
+                  command.commanded_vertical_accel_mps2,
+                  command.saturated);
     return command;
 }
 
@@ -195,6 +208,13 @@ inline flight_control_command flight_path_angle_guidance_command(const flight_ki
                         command.saturated);
     command.commanded_vertical_accel_mps2 = vertical_accel;
     command.commanded_normal_load_factor_g = std::abs(vertical_accel) / constants::gravity_mps2;
+    XSF_LOG_TRACE("flight-path guidance: gamma={:.4f}rad cmd_gamma={:.4f}rad pitch={:.3f}rad vz={:.3f}m/s az={:.3f}m/s^2 sat={}",
+                  state.flight_path_rad,
+                  commanded_fpa_rad,
+                  command.commanded_pitch_rad,
+                  command.commanded_vertical_speed_mps,
+                  command.commanded_vertical_accel_mps2,
+                  command.saturated);
     return command;
 }
 
@@ -250,6 +270,13 @@ inline flight_control_command heading_change_command(const flight_kinematic_stat
     command.commanded_normal_load_factor_g = std::abs(lateral_accel) / constants::gravity_mps2;
     command.commanded_vertical_speed_mps = state.vertical_speed_mps;
     command.commanded_pitch_rad = state.pitch_rad;
+    XSF_LOG_TRACE("heading guidance: hdg={:.4f}rad cmd_hdg={:.4f}rad roll={:.3f}rad yaw_rate={:.4f}rad/s ay={:.3f}m/s^2 sat={}",
+                  state.heading_rad,
+                  target_heading_rad,
+                  command.commanded_roll_rad,
+                  command.commanded_heading_rate_rad_s,
+                  command.commanded_lateral_accel_mps2,
+                  command.saturated);
     return command;
 }
 
@@ -320,6 +347,9 @@ struct waypoint_track_controller {
             flight_control_command command;
             command.valid = false;
             command.status = flight_command_status::invalid_target;
+            XSF_LOG_INFO("waypoint arrived: distance={:.1f}m radius={:.1f}m",
+                         horizontal_range_m,
+                         target.arrive_radius_m);
             return command;
         }
 
@@ -350,6 +380,10 @@ struct approach_glideslope_controller {
                                                                 commanded_altitude_m,
                                                                 limits,
                                                                 dt_s);
+        XSF_LOG_DEBUG("approach glideslope: horiz={:.1f}m threshold_alt={:.1f}m cmd_alt={:.1f}m",
+                      horizontal_range_m,
+                      threshold_altitude_m,
+                      commanded_altitude_m);
         return detail::merge_commands(lateral, vertical);
     }
 };
@@ -385,6 +419,11 @@ struct flare_controller {
             target.target_sink_rate_mps *
             std::clamp(altitude_above_touchdown_m / std::max(target.flare_altitude_m, 1.0), 0.0, 1.0);
         const double commanded_fpa = std::asin(std::clamp(command_sink_rate / speed, -1.0, 1.0));
+        XSF_LOG_DEBUG("flare: alt_agl={:.2f}m sink={:.3f}m/s cmd_sink={:.3f}m/s cmd_gamma={:.4f}rad",
+                      altitude_above_touchdown_m,
+                      state.vertical_speed_mps,
+                      command_sink_rate,
+                      commanded_fpa);
         return detail::flight_path_angle_guidance_command(state, commanded_fpa, limits, dt_s);
     }
 };
