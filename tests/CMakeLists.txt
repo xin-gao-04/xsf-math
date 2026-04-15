@@ -22,3 +22,7 @@ add_executable(test_algorithm_io test_algorithm_io.cpp)
 target_link_libraries(test_algorithm_io PRIVATE xsf_math)
 target_compile_definitions(test_algorithm_io PRIVATE TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 add_test(NAME test_algorithm_io COMMAND test_algorithm_io)
+
+add_executable(test_log test_log.cpp)
+target_link_libraries(test_log PRIVATE xsf_math)
+add_test(NAME test_log COMMAND test_log)
