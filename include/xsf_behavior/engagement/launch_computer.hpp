@@ -52,6 +52,7 @@ struct launch_candidate {
     vec3   launcher_forward_wcs{0, 0, 0};  // 发射平台前向，用于离轴角；为零则不检查
     vec3   target_position_wcs{};
     vec3   target_velocity_wcs{};
+    vec3   target_acceleration_wcs{};
 };
 
 struct launch_computer_result {
@@ -76,11 +77,60 @@ struct launch_computer_result {
 struct launch_computer {
     weapon_kinematics      weapon{};
     launch_constraint_limits limits{};
+    int intercept_refine_iterations = 4;
 
     // 估算武器平均速度：简单两段平均（推力末速和最小末速的算术均值）。
     double nominal_flight_speed_mps() const {
         double avg = 0.5 * (weapon.burnout_speed_mps + weapon.min_terminal_speed_mps);
         return std::max(avg, 1.0);
+    }
+
+    double distance_travelled_by_weapon(double time_s) const {
+        if (time_s <= 0.0) return 0.0;
+
+        double burn_time = std::max(weapon.burn_duration_s, 1.0e-6);
+        double accel = std::max(weapon.avg_thrusting_accel_mps2,
+                                weapon.burnout_speed_mps / burn_time);
+        if (time_s <= burn_time) return 0.5 * accel * time_s * time_s;
+
+        double burn_distance = 0.5 * accel * burn_time * burn_time;
+        double coast_time = time_s - burn_time;
+        if (weapon.coast_accel_mps2 >= 0.0) {
+            return burn_distance + weapon.burnout_speed_mps * coast_time +
+                   0.5 * weapon.coast_accel_mps2 * coast_time * coast_time;
+        }
+
+        double time_to_terminal =
+            (weapon.min_terminal_speed_mps - weapon.burnout_speed_mps) / weapon.coast_accel_mps2;
+        time_to_terminal = std::max(time_to_terminal, 0.0);
+        if (coast_time <= time_to_terminal) {
+            return burn_distance + weapon.burnout_speed_mps * coast_time +
+                   0.5 * weapon.coast_accel_mps2 * coast_time * coast_time;
+        }
+
+        double decel_distance = weapon.burnout_speed_mps * time_to_terminal +
+                                0.5 * weapon.coast_accel_mps2 * time_to_terminal * time_to_terminal;
+        return burn_distance + decel_distance +
+               weapon.min_terminal_speed_mps * (coast_time - time_to_terminal);
+    }
+
+    double solve_time_to_range(double range_m) const {
+        if (range_m <= 0.0) return 0.0;
+
+        double hi = std::min(limits.max_time_of_flight_s, 10.0);
+        while (distance_travelled_by_weapon(hi) < range_m && hi < limits.max_time_of_flight_s) {
+            hi = std::min(hi * 2.0, limits.max_time_of_flight_s);
+            if (hi >= limits.max_time_of_flight_s) break;
+        }
+        if (distance_travelled_by_weapon(hi) < range_m) return limits.max_time_of_flight_s;
+
+        double lo = 0.0;
+        for (int i = 0; i < 40; ++i) {
+            double mid = 0.5 * (lo + hi);
+            if (distance_travelled_by_weapon(mid) >= range_m) hi = mid;
+            else lo = mid;
+        }
+        return hi;
     }
 
     // 基于“等速追击 + 目标线性外推”的二次方程近似拦截时间。
@@ -119,7 +169,22 @@ struct launch_computer {
             }
         }
 
-        vec3 impact = cand.target_position_wcs + cand.target_velocity_wcs * tof;
+        vec3 impact{};
+        for (int iter = 0; iter < std::max(intercept_refine_iterations, 1); ++iter) {
+            impact = cand.target_position_wcs +
+                     cand.target_velocity_wcs * tof +
+                     0.5 * cand.target_acceleration_wcs * tof * tof;
+            double refined_range = (impact - cand.launcher_position_wcs).magnitude();
+            double refined_tof = solve_time_to_range(refined_range);
+            if (std::abs(refined_tof - tof) < 1.0e-2) {
+                tof = refined_tof;
+                break;
+            }
+            tof = refined_tof;
+        }
+        impact = cand.target_position_wcs +
+                 cand.target_velocity_wcs * tof +
+                 0.5 * cand.target_acceleration_wcs * tof * tof;
 
         r.time_of_flight_s = tof;
         r.intercept_time_s = sim_time_s + tof;

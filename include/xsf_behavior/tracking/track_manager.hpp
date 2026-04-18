@@ -60,14 +60,14 @@ struct track_manager {
     int next_track_id = 1;
 
     // 从一个新量测起始一条试探航迹。
-    int start_tentative_track(const detection& det, double sim_time_s) {
+    int start_tentative_track(const detection& det, double sim_time_s, const vec3& initial_velocity = {}) {
         track_record rec;
         rec.id = next_track_id++;
         rec.target_index = det.target_index;
         for (int i = 0; i < 3; ++i) {
             rec.kf.meas_noise[i] = params.initial_position_cov;
         }
-        rec.kf.init(sim_time_s, det.position);
+        rec.kf.init(sim_time_s, det.position, initial_velocity);
         // 速度协方差由 init 默认填 4 × meas_noise，若需要外部可覆盖。
         for (int i = 0; i < 3; ++i) {
             rec.kf.P[i+3][i+3] = params.initial_velocity_cov;

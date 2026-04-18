@@ -4,4 +4,4 @@
 
 #include "../core/atmosphere.hpp"
 #include "../aero/aerodynamics.hpp"
-
+#include "../flight/six_dof.hpp"

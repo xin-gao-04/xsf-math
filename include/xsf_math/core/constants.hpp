@@ -16,6 +16,12 @@ struct constants {
     static constexpr double speed_of_light  = 299792458.0;        // m/s
     static constexpr double boltzmann_k     = 1.380649e-23;       // J/K
     static constexpr double earth_radius_m  = 6371000.0;          // m（平均值）
+    static constexpr double earth_equatorial_radius_m = 6378137.0; // WGS-84 长半轴
+    static constexpr double earth_flattening = 1.0 / 298.257223563;
+    static constexpr double earth_eccentricity_sq =
+        earth_flattening * (2.0 - earth_flattening);
+    static constexpr double earth_rotation_rate_rad_s = 7.2921150e-5;
+    static constexpr double julian_date_j2000 = 2451545.0;
     static constexpr double gravity_mps2    = 9.80665;            // m/s^2（标准重力）
 
     // 大气（ISA 海平面）

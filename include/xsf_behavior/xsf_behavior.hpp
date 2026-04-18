@@ -18,10 +18,12 @@
 #include "sensor/detection_controller.hpp"
 
 #include "tracking/track_manager.hpp"
+#include "tracking/track_initiator.hpp"
 
 #include "engagement/launch_computer.hpp"
 #include "engagement/fuze_controller.hpp"
 #include "engagement/engagement_controller.hpp"
+#include "engagement/weapon_assignment.hpp"
 
 #include "ew/jam_assignment.hpp"
 #include "ew/ew_technique_controller.hpp"

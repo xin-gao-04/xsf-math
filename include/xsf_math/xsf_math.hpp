@@ -7,7 +7,8 @@
 // 2. `domains/*`
 //    按业务链路组织的业务域视图。
 // `xsf_behavior`
-// 当前仅包含飞行相关行为子域，侧重输出可被外部框架消费的控制命令。
+// 当前已覆盖 flight / sensor / tracking / engagement / ew / orbital 六个行为子域，
+// 侧重输出可被外部框架消费的控制命令。
 
 // === 数学算法层：业务域入口 ===
 #include "domains/foundation.hpp"
@@ -16,6 +17,7 @@
 #include "domains/engagement.hpp"
 #include "domains/flight_dynamics.hpp"
 #include "domains/electronic_warfare.hpp"
+#include "domains/mission_systems.hpp"
 #include "domains/orbital_dynamics.hpp"
 
 // === 行为控制层：飞行动作 ===
