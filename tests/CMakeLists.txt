@@ -26,3 +26,7 @@ add_test(NAME test_algorithm_io COMMAND test_algorithm_io)
 add_executable(test_log test_log.cpp)
 target_link_libraries(test_log PRIVATE xsf_math)
 add_test(NAME test_log COMMAND test_log)
+
+add_executable(test_tracking_identity test_tracking_identity.cpp)
+target_link_libraries(test_tracking_identity PRIVATE xsf_math)
+add_test(NAME test_tracking_identity COMMAND test_tracking_identity)

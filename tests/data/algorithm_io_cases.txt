@@ -22,14 +22,14 @@ raan_deg=40
 argp_deg=15
 nu_deg=5
 dt_s=86400
-expected_raan_deg=39.0383
-expected_argp_deg=18.1193
+expected_raan_deg=40.9644
+expected_argp_deg=11.8707
 tol_deg=0.05
 
 type=hohmann
 r1_m=6771000
 r2_m=7171000
-expected_total_dv_mps=221.572
+expected_total_dv_mps=217.015
 tol_mps=0.5
 
 type=false_target_rcs
