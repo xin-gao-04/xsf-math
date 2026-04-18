@@ -107,6 +107,20 @@ Pk = f(几何, 战斗部, 目标类别, 干扰/对抗)
 - 单发问题：这一发能不能成
 - 多发问题：多次独立尝试之后总体把握有多大
 
+```mermaid
+flowchart LR
+    subgraph 单发["🎯 单发杀伤"]
+        S1["single_shot_pk"]
+    end
+    subgraph 累计["📊 累计杀伤"]
+        C1["cumulative_pk<br/>n 次独立射击"]
+    end
+    S1 --> C1
+
+    style S1 fill:#dbeafe
+    style C1 fill:#e1f5e1
+```
+
 ## 6. 蒙特卡洛判定为什么必要
 
 `monte_carlo_kill` 提供轻量随机试验能力，可用于：
@@ -125,8 +139,12 @@ Pk = f(几何, 战斗部, 目标类别, 干扰/对抗)
 
 杀伤评估不是独立开始的，它通常位于：
 
-```text
-拦截几何 -> 引信/PCA -> 脱靶量 -> Pk 曲线或查表 -> 蒙特卡洛结果
+```mermaid
+flowchart LR
+    INT["🎯 拦截几何"] --> PCA["💥 引信/PCA"] --> MISS["📏 脱靶量"] --> PK["📈 Pk曲线/查表"] --> MC["🎲 蒙特卡洛结果"]
+
+    style INT fill:#dbeafe
+    style MC fill:#e1f5e1
 ```
 
 这条链里最关键的是：
@@ -150,15 +168,50 @@ Pk = f(几何, 战斗部, 目标类别, 干扰/对抗)
 
 这让电子战和杀伤评估之间形成了一个清晰接口：
 
-```text
-EW -> 误差放大 -> 脱靶变差 -> Pk 下降
-```
+$$
+EW \xrightarrow{\text{误差放大}} R_{miss}\uparrow \xrightarrow{Pk\text{曲线}} Pk\downarrow
+$$
 
 这条链很重要，因为它说明电子战不一定非要直接改 `Pk`，也可以先改几何精度，再让 `Pk` 自然退化。
 
-## 9. 相关源码
+## 9. API 速查
+
+**`lethality/pk_model.hpp`**
+
+| 符号 | 角色 |
+|------|------|
+| `pk_curve` | 曲线参数化的单发 Pk，支持 `evaluate(miss_distance)` |
+| `pk_curve::blast_fragmentation(lethal_r, max_r)` | 破片战斗部预设曲线 |
+| `pk_curve::continuous_rod(rod_radius)` | 连续杆战斗部预设曲线 |
+| `kill_assessment` | 单发杀伤评估结果 |
+| `single_shot_pk(miss_distance, curve)` | 单发命中概率 |
+| `cumulative_pk(individual_pks)` | $1 - \prod(1 - p_i)$ |
+| `monte_carlo_kill` | 随机种子 RNG，`evaluate(miss, curve)` 返回布尔结果 |
+| `target_class` | fighter/bomber/.../ship 枚举 |
+| `typical_lethal_radius(tc)` | 按目标类别返回经验致命半径 |
+| `ew_degraded_miss_distance(baseline_miss, ew_factor)` | EW 误差放大后的脱靶量 |
+
+**`lethality/fuze.hpp`**
+
+| 符号 | 角色 |
+|------|------|
+| `cpa_result` | `compute_cpa` 的输出，含最近距离和到达时间 |
+| `compute_cpa(r, v)` | 匀速外推下的最近接近点 |
+| `proximity_fuze` | 解保延迟、解保距离、触发半径、哑弹概率字段 |
+| `pca_two_stage` | 粗门限 + 细门限两级近炸判决 |
+
+**`lethality/launch_pk_table.hpp`**
+
+| 符号 | 角色 |
+|------|------|
+| `launch_pk_table` | 单表（按下航程 × 侧偏距离查询） |
+| `launch_pk_table_set` | 多条件（发射平台、目标类型、高度、速度）表集合 |
+| `launch_pk_table_set::load_core_file` | 读取外部 Pk 数据文件，按表头字段解析 |
+
+## 10. 相关源码
 
 - `include/xsf_math/lethality/pk_model.hpp`
 - `include/xsf_math/lethality/launch_pk_table.hpp`
+- `include/xsf_math/lethality/fuze.hpp`
 - `examples/missile_engagement_example.cpp`
 - `tests/test_guidance.cpp`

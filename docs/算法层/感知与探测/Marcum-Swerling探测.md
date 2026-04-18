@@ -46,6 +46,18 @@
 
 典型组合如下：
 
+```mermaid
+flowchart LR
+    RADAR["📡 monostatic_radar_equation<br/>计算 SNR"] --> FORWARD["📊 compute_pd<br/>Pd = f(SNR, Pfa, Swerling)"]
+    FORWARD --> RES1["✅ 检测概率 Pd"]
+    RADAR --> REVERSE["📏 required_snr<br/>反推所需 SNR"]
+    REVERSE --> RANGE["📐 compute_detection_range<br/>最大作用距离"]
+    REVERSE --> RES2["✅ 所需 SNR 阈值"]
+
+    style RES1 fill:#e1f5e1
+    style RANGE fill:#e1f5e1
+```
+
 1. 用 `monostatic_radar_equation(...)` 求 `snr_linear`
 2. 用 `marcum_swerling::compute_pd(...)` 求 `Pd`
 3. 或用 `required_snr(...)` 反推 `compute_detection_range(...)`

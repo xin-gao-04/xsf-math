@@ -4,6 +4,26 @@
 
 ## 文档结构
 
+```mermaid
+flowchart TD
+    subgraph 思维框架["🧠 思维框架"]
+        A["飞行器飞行心智模型.md"]
+    end
+    subgraph 程序层["🚀 程序层"]
+        B["原生制导程序层.md"]
+    end
+    subgraph 动作层["🎮 动作层"]
+        C["原子控制器总览.md"]
+        D["飞行行为工作流.md"]
+    end
+
+    A --> B
+    A --> C --> D
+
+    style A fill:#dbeafe
+    style D fill:#e1f5e1
+```
+
 - `飞行器飞行心智模型.md`
   飞行约束、纵横向控制思维链、阶段切换与能量边界。
 - `原生制导程序层.md`

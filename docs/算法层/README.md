@@ -72,6 +72,27 @@
 
 这也是算法层需要详细文档的原因：重点不是“某个函数怎么调”，而是“这些模块为什么要这样配合”。
 
+```mermaid
+flowchart LR
+    subgraph 组合1["🔍 探测与传播闭环"]
+        C1A["core"] --> C1B["radar"]
+    end
+    subgraph 组合2["🎯 估计与制导闭环"]
+        C2A["tracking"] --> C2B["guidance"] --> C2C["aero"]
+    end
+    subgraph 组合3["💥 拦截到杀伤闭环"]
+        C3A["guidance"] --> C3B["lethality"]
+    end
+    subgraph 组合4["🌍 轨道传播与机动闭环"]
+        C4A["core"] --> C4B["orbital"]
+    end
+
+    style 组合1 fill:#dbeafe
+    style 组合2 fill:#ffedd5
+    style 组合3 fill:#fce7f3
+    style 组合4 fill:#e1f5e1
+```
+
 ## 业务域总览
 
 - `基础支撑`
@@ -114,8 +135,23 @@
 2. `算法链路与逻辑详解.md`
 3. `基础支撑/README.md`
 4. `感知与探测/README.md`
-5. `交战与杀伤/README.md`
-6. `轨道动力学/README.md`
+5. `跟踪估计/README.md`
+6. `交战与杀伤/README.md`
+7. `飞行与气动/README.md`
+8. `电子战/README.md`
+9. `轨道动力学/README.md`
+
+## 业务域 ↔ 技术模块
+
+| 业务域 | 聚合入口 | 主要技术模块 |
+|--------|----------|--------------|
+| 基础支撑 | `domains/foundation.hpp` | `core`（常量/向量/插值/坐标/大气/RCS） |
+| 感知与探测 | `domains/perception.hpp` | `radar`（天线/传播/杂波/雷达方程/Marcum-Swerling）、`core/rcs` |
+| 跟踪估计 | `domains/tracking.hpp` | `tracking`（卡尔曼/α-β/最近邻/M-of-N） |
+| 交战与杀伤 | `domains/engagement.hpp` | `guidance`、`lethality`（引信/Pk/launch 表） |
+| 飞行与气动 | `domains/flight_dynamics.hpp` | `aero`、`core/atmosphere` |
+| 电子战 | `domains/electronic_warfare.hpp` | `ew`（自卫/站外/降级/箔条/诱饵） |
+| 轨道动力学 | `domains/orbital_dynamics.hpp` | `orbital`（Kepler/J2/机动） |
 
 ## 基础知识补充
 

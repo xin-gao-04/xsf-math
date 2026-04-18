@@ -3,4 +3,5 @@ cmake-build-*/
 .vs/
 .vscode/
 *.user
+.obsidian/
 CMakeUserPresets.json
