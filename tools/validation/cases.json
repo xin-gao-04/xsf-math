@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "id": "radar_detection",
+      "title": "Radar Detection Chain",
+      "binary": "examples/radar_detection_example",
+      "category": "algorithm",
+      "summary": "Sweep range, observe SNR/Pd decay, and capture the detection crossover."
+    },
+    {
+      "id": "missile_engagement",
+      "title": "Missile Engagement",
+      "binary": "examples/missile_engagement_example",
+      "category": "algorithm",
+      "summary": "Run a deterministic intercept scenario through terminal fuze evaluation."
+    },
+    {
+      "id": "orbital_example",
+      "title": "Orbital Mechanics",
+      "binary": "examples/orbital_example",
+      "category": "algorithm",
+      "summary": "Check representative LEO/GEO references, Kepler solving, and LOS blocking."
+    },
+    {
+      "id": "behavior_chain",
+      "title": "Behavior Chain",
+      "binary": "examples/behavior_chain_example",
+      "category": "behavior",
+      "summary": "Exercise sensor, tracking, launch, and burst phases as one observable chain."
+    }
+  ]
+}

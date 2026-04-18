@@ -62,7 +62,7 @@ void test_coordinated_turn_controller() {
     printf("OK\n");
 }
 
-// 下降控制器应输出负俯仰和负垂向速度。
+// 下降控制器应把俯仰朝向下降方向收敛，并输出负垂向速度。
 void test_descent_controller() {
     printf("  descent_controller... ");
     auto state = flight_kinematic_state::from_velocity({0.0, 0.0, -3000.0}, {160.0, 0.0, 0.0});
@@ -76,7 +76,7 @@ void test_descent_controller() {
     auto command = controller.compute(state, target, limits, 0.2);
 
     assert(command.valid);
-    assert(command.commanded_pitch_rad < 0.0);
+    assert(command.commanded_pitch_rad < state.pitch_rad);
     assert(command.commanded_vertical_speed_mps < 0.0);
     printf("OK\n");
 }

@@ -574,9 +574,6 @@ public:
                 if (std::abs(angle_to_go) <= completion_tolerance_rad) {
                     ++angles_completed;
                 }
-                if (!target.body_angle) {
-                    continuous_update_needed = true;
-                }
             } else if (target.rate_rad_s.has_value()) {
                 result.commands.angle_rate_cmd_rad_s[axis] = *target.rate_rad_s;
                 continuous_update_needed = true;

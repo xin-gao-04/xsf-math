@@ -1,11 +1,15 @@
 add_executable(radar_detection_example radar_detection_example.cpp)
 target_link_libraries(radar_detection_example PRIVATE xsf_math)
+add_test(NAME example_radar_detection_smoke COMMAND radar_detection_example --strict)
 
 add_executable(missile_engagement_example missile_engagement_example.cpp)
 target_link_libraries(missile_engagement_example PRIVATE xsf_math)
+add_test(NAME example_missile_engagement_smoke COMMAND missile_engagement_example --strict)
 
 add_executable(orbital_example orbital_example.cpp)
 target_link_libraries(orbital_example PRIVATE xsf_math)
+add_test(NAME example_orbital_smoke COMMAND orbital_example --strict)
 
 add_executable(behavior_chain_example behavior_chain_example.cpp)
 target_link_libraries(behavior_chain_example PRIVATE xsf_math)
+add_test(NAME example_behavior_chain_smoke COMMAND behavior_chain_example --strict)

@@ -117,14 +117,18 @@ endif()
 
 # Examples
 option(XSF_MATH_BUILD_EXAMPLES "Build examples" ON)
+option(XSF_MATH_BUILD_TESTS "Build tests" ON)
+
+if(XSF_MATH_BUILD_EXAMPLES OR XSF_MATH_BUILD_TESTS)
+    enable_testing()
+endif()
+
 if(XSF_MATH_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
 # Tests
-option(XSF_MATH_BUILD_TESTS "Build tests" ON)
 if(XSF_MATH_BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 

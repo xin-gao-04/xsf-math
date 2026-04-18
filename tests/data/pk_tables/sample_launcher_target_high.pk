@@ -3,7 +3,7 @@ Target Platform Type: TARGET_BETA
 Length Units: meters
 Speed Units: m/s
 Altitude: 4000
-Speed: 300
+Speed: 200
 0 1000
 0 0.40 0.50
 10000 0.60 0.70

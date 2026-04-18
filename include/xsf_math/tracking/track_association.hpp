@@ -1,12 +1,15 @@
 #pragma once
 
 #include "../core/vec3.hpp"
+#include <cstddef>
 #include <vector>
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace xsf_math {
+
+inline constexpr std::size_t invalid_target_index = std::numeric_limits<std::size_t>::max();
 
 // 用于关联的航迹状态
 struct track_state {
@@ -20,6 +23,9 @@ struct track_state {
 struct detection {
     vec3   position;
     double meas_noise[3] = {100.0, 100.0, 100.0};
+    std::size_t target_index = invalid_target_index;  // 来自搜索/调度层的目标身份
+
+    bool has_target_index() const { return target_index != invalid_target_index; }
 };
 
 // 关联结果

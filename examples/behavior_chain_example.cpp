@@ -12,6 +12,7 @@
 
 #include <xsf_math/xsf_math.hpp>
 #include <xsf_common/log.hpp>
+#include <xsf_common/validation_artifacts.hpp>
 #include <cstdio>
 
 using namespace xsf_math;
@@ -30,7 +31,7 @@ detection_inputs make_detection_inputs(const vec3& target_pos) {
     return in;
 }
 
-detection make_detection(const vec3& truth_pos, std::mt19937& rng) {
+detection make_detection(const vec3& truth_pos, std::size_t target_index, std::mt19937& rng) {
     // 加一点点位置噪声，让 KF + 关联器更有活干。
     std::normal_distribution<double> noise(0.0, 20.0);
     detection d;
@@ -38,12 +39,16 @@ detection make_detection(const vec3& truth_pos, std::mt19937& rng) {
                   truth_pos.y + noise(rng),
                   truth_pos.z + noise(rng)};
     d.meas_noise[0] = d.meas_noise[1] = d.meas_noise[2] = 400.0;  // 20m sigma^2
+    d.target_index = target_index;
     return d;
 }
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    const auto cli = xsf::validation::parse_cli(argc, argv);
+    xsf::validation::case_artifacts artifacts("behavior_chain", cli);
+
     printf("=== Behavior Chain Example (sensor -> tracking -> engagement) ===\n\n");
 
     // --- 目标真值 ---
@@ -96,6 +101,13 @@ int main() {
     vec3   weapon_pos{};
     vec3   weapon_vel{};
     int    engaged_track_id = -1;
+    bool   saw_burst = false;
+    bool   saw_break_off = false;
+    double burst_time_s = -1.0;
+    double launch_time_s = -1.0;
+    double final_pk = 0.0;
+    std::size_t confirmed_track_count = 0;
+    engagement_phase final_phase = engagement_phase::pre_engage;
 
     std::mt19937 rng(123);
 
@@ -106,6 +118,12 @@ int main() {
 
     printf(" t(s)  mode   R(km)  snr(dB)   Pd   trk  phase                \n");
     printf("-----  ----   -----  -------  ----  ---  ---------------------\n");
+
+    if (artifacts.enabled()) {
+        artifacts.write_timeseries_header({
+            "time_s", "mode", "range_km", "snr_db", "pd", "track_count", "phase", "weapon_launched"
+        });
+    }
 
     int step = 0;
     double min_miss = 1e10;
@@ -135,7 +153,7 @@ int main() {
         if (cmd.valid) {
             auto in = make_detection_inputs(target_pos);
             dec = sensor.evaluate(in);
-            if (dec.detected) detections.push_back(make_detection(target_pos, rng));
+            if (dec.detected) detections.push_back(make_detection(target_pos, cmd.target_index, rng));
         }
 
         // 4) 跟踪：仅在本 tick 传感器真正驻留时推进航迹（与 xsf-core 在 revisit 时触发 miss 的语义对齐）。
@@ -145,13 +163,30 @@ int main() {
             for (int idx : track_res.unassociated_detection_indices) {
                 tracker.start_tentative_track(detections[idx], sim_time);
             }
-            for (int id : track_res.confirmed_track_ids) {
-                scheduler.add_track_request(id, 0, sim_time);
-                XSF_LOG_INFO("chain: track confirmed id={} at t={:.2f}s", id, sim_time);
+            for (const auto& binding : track_res.confirmed_tracks) {
+                if (!binding.has_target_index()) continue;
+                scheduler.add_track_request(binding.track_id, binding.target_index, sim_time);
+                XSF_LOG_INFO("chain: track confirmed id={} target={} at t={:.2f}s",
+                             binding.track_id, binding.target_index, sim_time);
+                ++confirmed_track_count;
+                artifacts.append_event(sim_time,
+                                       "track_confirmed",
+                                       "Track reached confirmed state.",
+                                       {
+                                           xsf::validation::make_field("track_id", binding.track_id),
+                                           xsf::validation::make_field("target_index",
+                                                                       static_cast<int>(binding.target_index))
+                                       });
             }
             for (int id : track_res.dropped_track_ids) {
                 scheduler.drop_track_request(id);
                 if (id == engaged_track_id) engaged_track_id = -1;
+                artifacts.append_event(sim_time,
+                                       "track_dropped",
+                                       "Track was dropped by the track manager.",
+                                       {
+                                           xsf::validation::make_field("track_id", id)
+                                       });
             }
         }
 
@@ -174,9 +209,20 @@ int main() {
                 if (ecmd.issue_launch) {
                     weapon_launched = true;
                     weapon_launch_t = sim_time;
+                    launch_time_s = sim_time;
                     weapon_pos = {0, 0, 0};
                     weapon_vel = (rec->kf.position()).normalized() * 50.0;
                     engaged_track_id = rec->id;
+                    artifacts.append_event(sim_time,
+                                           "launch",
+                                           "Engagement controller issued a launch command.",
+                                           {
+                                               xsf::validation::make_field("track_id", rec->id),
+                                               xsf::validation::make_field("time_of_flight_s", ecmd.lc_result.time_of_flight_s, 3),
+                                               xsf::validation::make_field("intercept_x_m", ecmd.lc_result.intercept_point_wcs.x, 3),
+                                               xsf::validation::make_field("intercept_y_m", ecmd.lc_result.intercept_point_wcs.y, 3),
+                                               xsf::validation::make_field("intercept_z_m", ecmd.lc_result.intercept_point_wcs.z, 3)
+                                           });
                     printf("  %4.1f  LAUNCH track=%d intercept=[%.0f,%.0f,%.0f] TOF=%.1fs\n",
                            sim_time, rec->id,
                            ecmd.lc_result.intercept_point_wcs.x,
@@ -204,6 +250,46 @@ int main() {
         static engagement_phase last_phase = engagement_phase::pre_engage;
         bool phase_changed = (ecmd.phase != last_phase);
         last_phase = ecmd.phase;
+        final_phase = ecmd.phase;
+        if (phase_changed) {
+            const char* phase_str = "pre_engage";
+            switch (ecmd.phase) {
+                case engagement_phase::pre_engage:  phase_str = "pre_engage";  break;
+                case engagement_phase::launch:      phase_str = "launch";      break;
+                case engagement_phase::midcourse:   phase_str = "midcourse";   break;
+                case engagement_phase::terminal:    phase_str = "terminal";    break;
+                case engagement_phase::burst:       phase_str = "burst";       break;
+                case engagement_phase::post_engage: phase_str = "post_engage"; break;
+            }
+            artifacts.append_event(sim_time,
+                                   "phase_change",
+                                   "Engagement phase changed.",
+                                   {
+                                       xsf::validation::make_field("phase", phase_str)
+                                   });
+        }
+        if (cmd.valid && (step % 20 == 0 || phase_changed)) {
+            const char* mode_str = (cmd.mode == sensor_mode::search) ? "SRCH" : "TRAK";
+            const char* phase_str = "-";
+            switch (ecmd.phase) {
+                case engagement_phase::pre_engage:  phase_str = "pre_engage"; break;
+                case engagement_phase::launch:      phase_str = "launch";     break;
+                case engagement_phase::midcourse:   phase_str = "midcourse";  break;
+                case engagement_phase::terminal:    phase_str = "terminal";   break;
+                case engagement_phase::burst:       phase_str = "burst";      break;
+                case engagement_phase::post_engage: phase_str = "post_engage";break;
+            }
+            artifacts.append_timeseries_row({
+                xsf::validation::make_field("", sim_time, 3).value,
+                mode_str,
+                xsf::validation::make_field("", target_pos.magnitude() / 1000.0, 3).value,
+                xsf::validation::make_field("", dec.snr_db, 6).value,
+                xsf::validation::make_field("", dec.pd, 6).value,
+                xsf::validation::make_field("", tracker.active_count()).value,
+                phase_str,
+                xsf::validation::make_field("", weapon_launched).value
+            });
+        }
         if (cmd.valid && (step % 100 == 0 || phase_changed)) {
             const char* mode_str = (cmd.mode == sensor_mode::search) ? "SRCH" : "TRAK";
             const char* phase_str = "-";
@@ -227,6 +313,17 @@ int main() {
 
         // 7) 起爆或越过 CPA
         if (weapon_launched && ecmd.phase == engagement_phase::burst) {
+            saw_burst = true;
+            burst_time_s = sim_time;
+            final_pk = ecmd.fuze_decision.estimated_pk;
+            artifacts.append_event(sim_time,
+                                   "burst",
+                                   "Fuze burst completed the behavior chain.",
+                                   {
+                                       xsf::validation::make_field("miss_distance_m", ecmd.fuze_decision.miss_distance_m, 3),
+                                       xsf::validation::make_field("effective_miss_m", ecmd.fuze_decision.effective_miss_m, 3),
+                                       xsf::validation::make_field("estimated_pk", ecmd.fuze_decision.estimated_pk, 6)
+                                   });
             printf("\n  %4.1f  BURST  miss=%.2fm  eff_miss=%.2fm  Pk=%.3f\n",
                    sim_time,
                    ecmd.fuze_decision.miss_distance_m,
@@ -235,6 +332,13 @@ int main() {
             break;
         }
         if (weapon_launched && ecmd.phase == engagement_phase::post_engage) {
+            saw_break_off = true;
+            artifacts.append_event(sim_time,
+                                   "break_off",
+                                   "Engagement passed CPA without a burst.",
+                                   {
+                                       xsf::validation::make_field("closest_approach_m", min_miss, 3)
+                                   });
             printf("\n  %4.1f  BREAK-OFF (past CPA, no burst)\n", sim_time);
             break;
         }
@@ -245,6 +349,66 @@ int main() {
 
     printf("\nClosest approach distance: %.2f m\n", min_miss);
     printf("Active tracks at end: %zu\n", tracker.active_count());
+
+    const char* final_phase_name = "pre_engage";
+    switch (final_phase) {
+        case engagement_phase::pre_engage:  final_phase_name = "pre_engage";  break;
+        case engagement_phase::launch:      final_phase_name = "launch";      break;
+        case engagement_phase::midcourse:   final_phase_name = "midcourse";   break;
+        case engagement_phase::terminal:    final_phase_name = "terminal";    break;
+        case engagement_phase::burst:       final_phase_name = "burst";       break;
+        case engagement_phase::post_engage: final_phase_name = "post_engage"; break;
+    }
+
+    const bool passed =
+        confirmed_track_count > 0 &&
+        weapon_launched &&
+        saw_burst &&
+        min_miss < engagement.fuze.fuze.trigger_radius_m &&
+        final_pk > 0.5;
+    const std::string failure_reason = passed
+        ? std::string()
+        : "Behavior chain did not reach the expected confirm-launch-burst sequence";
+
+    artifacts.write_metrics({
+        xsf::validation::make_field("confirmed_track_count", confirmed_track_count),
+        xsf::validation::make_field("weapon_launched", weapon_launched),
+        xsf::validation::make_field("launch_time_s", launch_time_s, 3),
+        xsf::validation::make_field("saw_burst", saw_burst),
+        xsf::validation::make_field("burst_time_s", burst_time_s, 3),
+        xsf::validation::make_field("saw_break_off", saw_break_off),
+        xsf::validation::make_field("closest_approach_m", min_miss, 3),
+        xsf::validation::make_field("final_pk", final_pk, 6),
+        xsf::validation::make_field("active_tracks_end", tracker.active_count()),
+        xsf::validation::make_field("final_phase", final_phase_name)
+    });
+    artifacts.write_summary(
+        passed,
+        "Validate the sensor-tracking-engagement chain and confirm that it progresses into a successful burst outcome.",
+        "The scenario should confirm a track, issue launch, progress through midcourse/terminal phases, and end in burst rather than break-off.",
+        passed
+            ? "The behavior chain confirmed a track, launched, and completed in burst with a small miss distance and high estimated Pk."
+            : "The behavior chain failed to satisfy the expected phase progression or terminal outcome.",
+        {
+            xsf::validation::make_field("initial_target_range_km", 80.0, 1),
+            xsf::validation::make_field("target_speed_mps", target_vel.magnitude(), 3),
+            xsf::validation::make_field("search_frame_time_s", scheduler.params.search_frame_time_s, 3),
+            xsf::validation::make_field("track_revisit_time_s", scheduler.params.track_revisit_time_s, 3)
+        },
+        {
+            xsf::validation::make_field("confirmed_track_count", confirmed_track_count),
+            xsf::validation::make_field("weapon_launched", weapon_launched),
+            xsf::validation::make_field("launch_time_s", launch_time_s, 3),
+            xsf::validation::make_field("saw_burst", saw_burst),
+            xsf::validation::make_field("burst_time_s", burst_time_s, 3),
+            xsf::validation::make_field("saw_break_off", saw_break_off),
+            xsf::validation::make_field("closest_approach_m", min_miss, 3),
+            xsf::validation::make_field("final_pk", final_pk, 6),
+            xsf::validation::make_field("active_tracks_end", tracker.active_count()),
+            xsf::validation::make_field("final_phase", final_phase_name)
+        },
+        failure_reason);
+
     XSF_LOG_INFO("behavior chain example complete");
-    return 0;
+    return (cli.strict && !passed) ? 1 : 0;
 }

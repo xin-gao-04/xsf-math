@@ -25,6 +25,9 @@ struct track_record {
     unsigned int          detection_history_bits = 0;
     double                last_update_time_s = 0.0;
     bool                  confirmed = false;
+    std::size_t           target_index = invalid_target_index;
+
+    bool has_target_index() const { return target_index != invalid_target_index; }
 };
 
 struct track_manager_params {
@@ -36,9 +39,17 @@ struct track_manager_params {
 };
 
 struct track_manager_update_result {
+    struct confirmed_track_binding {
+        int         track_id = -1;
+        std::size_t target_index = invalid_target_index;
+
+        bool has_target_index() const { return target_index != invalid_target_index; }
+    };
+
     std::vector<int>                unassociated_detection_indices;
     std::vector<int>                dropped_track_ids;
     std::vector<int>                confirmed_track_ids;   // 本次更新后新确认的航迹
+    std::vector<confirmed_track_binding> confirmed_tracks; // 兼容 scheduler 所需的身份回传
 };
 
 struct track_manager {
@@ -52,6 +63,7 @@ struct track_manager {
     int start_tentative_track(const detection& det, double sim_time_s) {
         track_record rec;
         rec.id = next_track_id++;
+        rec.target_index = det.target_index;
         for (int i = 0; i < 3; ++i) {
             rec.kf.meas_noise[i] = params.initial_position_cov;
         }
@@ -105,7 +117,9 @@ struct track_manager {
             if (it == tracks.end()) continue;
             auto& rec = it->second;
             if (a.detection_idx >= 0) {
-                rec.kf.update(sim_time_s, detections[a.detection_idx].position);
+                const auto& det = detections[static_cast<std::size_t>(a.detection_idx)];
+                rec.kf.update(sim_time_s, det.position);
+                if (det.has_target_index()) rec.target_index = det.target_index;
                 params.mofn.record_hit(rec.mofn);
                 rec.failures_until_drop = params.drop_after_misses;
                 rec.detection_history_bits = (rec.detection_history_bits << 1) | 0x1u;
@@ -114,6 +128,7 @@ struct track_manager {
                 rec.confirmed = params.mofn.is_confirmed(rec.mofn);
                 if (!was_confirmed && rec.confirmed) {
                     result.confirmed_track_ids.push_back(rec.id);
+                    result.confirmed_tracks.push_back({rec.id, rec.target_index});
                 }
             } else {
                 params.mofn.record_miss(rec.mofn);
