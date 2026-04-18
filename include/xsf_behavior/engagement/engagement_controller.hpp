@@ -3,7 +3,9 @@
 #include <xsf_common/log.hpp>
 #include <xsf_behavior/engagement/fuze_controller.hpp>
 #include <xsf_behavior/engagement/launch_computer.hpp>
+#include <xsf_math/guidance/guidance_decoupling.hpp>
 #include <xsf_math/guidance/proportional_nav.hpp>
+#include <xsf_math/guidance/seeker.hpp>
 
 namespace xsf_math {
 
@@ -28,6 +30,10 @@ struct engagement_context {
     fuze_inputs             fuze_in{};
     double                  sim_time_s = 0.0;
     bool                    weapon_launched = false;
+    bool                    has_weapon_attitude = false;
+    euler_angles            weapon_attitude{};
+    bool                    has_seeker_measurement = false;
+    seeker_measurement      seeker_observation{};
 };
 
 struct engagement_command {
@@ -35,8 +41,17 @@ struct engagement_command {
     bool                   issue_launch = false;
     launch_computer_result lc_result{};
     vec3                   guidance_accel_cmd{};
+    guidance_channel_command guidance_channel_cmd{};
     fuze_decision          fuze_decision{};
     bool                   request_break_off = false;
+};
+
+struct terminal_transition_criteria {
+    double coarse_gate_range_m = 0.0;
+    double range_threshold_m = 1500.0;
+    double time_to_go_threshold_s = 8.0;
+    double los_rate_threshold_rad_s = 0.01;
+    int conditions_required = 1;
 };
 
 struct engagement_controller {
@@ -45,6 +60,7 @@ struct engagement_controller {
     augmented_proportional_nav apn{};
     fuze_controller         fuze{};
     accel_limiter           limiter{};
+    terminal_transition_criteria terminal_logic{};
 
     engagement_command update(const engagement_context& ctx) const {
         engagement_command cmd;
@@ -80,7 +96,19 @@ struct engagement_controller {
 
         // 制导：粗门限内走 APN，外侧走 PN。
         vec3 raw;
-        if (cmd.fuze_decision.in_coarse_gate) {
+        int terminal_votes = 0;
+        double coarse_gate = (terminal_logic.coarse_gate_range_m > 0.0)
+            ? terminal_logic.coarse_gate_range_m
+            : fuze.pca.coarse_gate_m;
+        if (ctx.geom.slant_range() <= coarse_gate || cmd.fuze_decision.in_coarse_gate) ++terminal_votes;
+        if (ctx.fuze_in.dt_s >= 0.0 && cmd.fuze_decision.time_to_cpa_s <= terminal_logic.time_to_go_threshold_s)
+            ++terminal_votes;
+        if (ctx.geom.slant_range() <= terminal_logic.range_threshold_m) ++terminal_votes;
+        if (ctx.geom.los_rate().magnitude() >= terminal_logic.los_rate_threshold_rad_s) ++terminal_votes;
+        if (ctx.has_seeker_measurement && (ctx.seeker_observation.locked || ctx.seeker_observation.in_fov))
+            ++terminal_votes;
+
+        if (terminal_votes >= std::max(1, terminal_logic.conditions_required)) {
             cmd.phase = engagement_phase::terminal;
             raw = apn.compute_accel(ctx.geom);
         } else {
@@ -88,6 +116,11 @@ struct engagement_controller {
             raw = pn.compute_accel(ctx.geom);
         }
         cmd.guidance_accel_cmd = limiter.limit(raw);
+        if (ctx.has_weapon_attitude) {
+            cmd.guidance_channel_cmd = decompose_guidance_accel(cmd.guidance_accel_cmd,
+                                                                ctx.weapon_attitude,
+                                                                ctx.geom.weapon_vel.magnitude());
+        }
         return cmd;
     }
 };

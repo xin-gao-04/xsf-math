@@ -2,6 +2,7 @@
 
 #include <xsf_common/log.hpp>
 #include <xsf_math/core/constants.hpp>
+#include <xsf_math/orbital/lambert.hpp>
 #include <xsf_math/orbital/maneuvers.hpp>
 #include <vector>
 
@@ -25,7 +26,8 @@ enum class orbital_burn_kind {
     inplane_sma_change,
     plane_change,
     raan_inclination_change,
-    circularize
+    circularize,
+    lambert_transfer
 };
 
 struct orbital_burn_step {
@@ -35,6 +37,7 @@ struct orbital_burn_step {
     double                  transfer_sma_m = 0.0;       // 仅 SMA 改变使用
     double                  target_inclination_rad = 0.0; // 仅平面机动
     double                  target_raan_rad = 0.0;        // 仅平面机动
+    vec3                    target_position_eci{};
 };
 
 struct orbital_plan_result {
@@ -129,6 +132,30 @@ struct orbital_maneuver_planner {
         b.transfer_sma_m = radius_m;
         out.steps.push_back(b);
         out.total_delta_v_mps = b.delta_v_mps;
+        return out;
+    }
+
+    orbital_plan_result plan_lambert_intercept(const vec3& current_position_eci,
+                                               const vec3& current_velocity_eci,
+                                               const vec3& target_position_eci,
+                                               double time_of_flight_s,
+                                               double gravitational_parameter = mu_earth) const {
+        orbital_plan_result out;
+        auto lambert = solve_lambert(current_position_eci,
+                                     target_position_eci,
+                                     time_of_flight_s,
+                                     false,
+                                     gravitational_parameter);
+        if (!lambert.valid) return out;
+
+        orbital_burn_step b;
+        b.kind = orbital_burn_kind::lambert_transfer;
+        b.condition = orbital_burn_condition::immediate;
+        b.delta_v_mps = (lambert.departure_velocity_eci - current_velocity_eci).magnitude();
+        b.target_position_eci = target_position_eci;
+        out.steps.push_back(b);
+        out.total_delta_v_mps = b.delta_v_mps;
+        out.total_duration_s = time_of_flight_s;
         return out;
     }
 };
