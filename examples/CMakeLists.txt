@@ -6,3 +6,6 @@ target_link_libraries(missile_engagement_example PRIVATE xsf_math)
 
 add_executable(orbital_example orbital_example.cpp)
 target_link_libraries(orbital_example PRIVATE xsf_math)
+
+add_executable(behavior_chain_example behavior_chain_example.cpp)
+target_link_libraries(behavior_chain_example PRIVATE xsf_math)
