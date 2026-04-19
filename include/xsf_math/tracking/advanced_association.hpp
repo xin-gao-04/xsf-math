@@ -8,29 +8,34 @@
 
 namespace xsf_math {
 
+// 关联假设（Association hypothesis）
 struct association_hypothesis {
     std::vector<association_result> assignments;
     double total_cost = 0.0;
 };
 
+// JPDA 配对概率（JPDA pair probability）
 struct jpda_pair_probability {
     int track_id = -1;
     int detection_idx = -1;
     double probability = 0.0;
 };
 
+// JPDA 关联结果（JPDA association result）
 struct jpda_result {
     std::vector<jpda_pair_probability> marginals;
     std::vector<std::pair<int, double>> missed_track_probability;
     int hypothesis_count = 0;
 };
 
+// MHT 分支（MHT branch）
 struct mht_branch {
     association_hypothesis hypothesis;
     double score = 0.0;
     int depth = 0;
 };
 
+// 内部实现细节（Internal implementation details）
 namespace detail {
 
 inline void enumerate_association_hypotheses(const std::vector<track_state>& tracks,
@@ -84,6 +89,7 @@ inline std::vector<association_hypothesis> build_hypotheses(const std::vector<tr
 
 }  // namespace detail
 
+// 全局最近邻关联器（Global Nearest Neighbor associator）
 struct gnn_associator {
     double gate_threshold = 16.0;
     double miss_cost = 8.0;
@@ -101,6 +107,7 @@ struct gnn_associator {
     }
 };
 
+// JPDA 关联器（Joint Probabilistic Data Association associator）
 struct jpda_associator {
     double gate_threshold = 16.0;
     double miss_cost = 8.0;
@@ -152,6 +159,7 @@ struct jpda_associator {
     }
 };
 
+// MHT 关联器（Multiple Hypothesis Tracking associator）
 struct mht_associator {
     double gate_threshold = 16.0;
     double miss_cost = 8.0;

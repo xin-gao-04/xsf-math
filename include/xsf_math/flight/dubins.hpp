@@ -8,40 +8,51 @@
 
 namespace xsf_math {
 
+// Dubins 路径位姿（Dubins Path Pose）
 struct dubins_pose {
-    double x_m = 0.0;
-    double y_m = 0.0;
-    double heading_rad = 0.0;
+    double x_m = 0.0;  // X 坐标，单位米（X Coordinate in Meters）
+    double y_m = 0.0;  // Y 坐标，单位米（Y Coordinate in Meters）
+    double heading_rad = 0.0;  // 航向角，单位弧度（Heading Angle in Radians）
 };
 
-enum class dubins_segment_kind { left, straight, right };
+// Dubins 路径段类型（Dubins Segment Kind）
+enum class dubins_segment_kind {
+    left,     // 左转弯（Left Turn）
+    straight, // 直线（Straight）
+    right     // 右转弯（Right Turn）
+};
 
+// Dubins 路径段（Dubins Path Segment）
 struct dubins_segment {
-    dubins_segment_kind kind = dubins_segment_kind::straight;
-    double length_m = 0.0;
-    double turn_radius_m = 0.0;
+    dubins_segment_kind kind = dubins_segment_kind::straight;  // 段类型（Segment Kind）
+    double length_m = 0.0;  // 段长度，单位米（Segment Length in Meters）
+    double turn_radius_m = 0.0;  // 转弯半径，单位米（Turn Radius in Meters）
 };
 
+// 圆形障碍物（Circular Obstacle）
 struct circular_obstacle {
-    vec3 center_wcs{};
-    double radius_m = 0.0;
+    vec3 center_wcs{};  // 中心点世界坐标（Obstacle Center in WCS）
+    double radius_m = 0.0;  // 半径，单位米（Radius in Meters）
 };
 
+// Dubins 路径结果（Dubins Path Result）
 struct dubins_path {
-    bool valid = false;
-    std::vector<dubins_segment> segments;
-    std::vector<vec3> waypoints_wcs;
-    double total_length_m = 0.0;
+    bool valid = false;  // 路径是否有效（Whether Path is Valid）
+    std::vector<dubins_segment> segments;  // 路径段序列（Sequence of Path Segments）
+    std::vector<vec3> waypoints_wcs;  // 路径航点世界坐标（Path Waypoints in WCS）
+    double total_length_m = 0.0;  // 总长度，单位米（Total Length in Meters）
 };
 
 namespace detail {
 
+// 将航向角归一化到 [-pi, pi]（Wrap Heading Angle to [-pi, pi]）
 inline double wrap_heading(double rad) {
     while (rad > constants::pi) rad -= constants::two_pi;
     while (rad < -constants::pi) rad += constants::two_pi;
     return rad;
 }
 
+// 点到线段距离的平方（Squared Point-to-Segment Distance）
 inline double point_to_segment_distance_sq(double px, double py,
                                            double ax, double ay,
                                            double bx, double by) {
@@ -60,9 +71,11 @@ inline double point_to_segment_distance_sq(double px, double py,
 
 }  // namespace detail
 
+// Dubins 路径规划器（Dubins Path Planner）
 struct dubins_planner {
-    double minimum_turn_radius_m = 300.0;
+    double minimum_turn_radius_m = 300.0;  // 最小转弯半径，单位米（Minimum Turn Radius in Meters）
 
+    // 规划从起点到目标点的 Dubins 路径（Plan Dubins Path from Start to Goal）
     dubins_path plan(const dubins_pose& start,
                      const dubins_pose& goal,
                      const std::vector<circular_obstacle>& obstacles = {}) const {

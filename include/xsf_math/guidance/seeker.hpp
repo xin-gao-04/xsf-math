@@ -9,29 +9,33 @@
 
 namespace xsf_math {
 
+// 导引头测量结果（Seeker Measurement Result）
 struct seeker_measurement {
-    bool locked = false;
-    bool in_fov = false;
-    bool reacquired = false;
-    double azimuth_rad = 0.0;
-    double elevation_rad = 0.0;
-    double line_of_sight_rate_rad_s = 0.0;
-    vec3 los_unit_wcs{};
+    bool locked = false;  // 是否锁定目标（Whether Target is Locked）
+    bool in_fov = false;  // 是否在视场内（Whether Target is in Field of View）
+    bool reacquired = false;  // 是否重新捕获（Whether Target is Reacquired）
+    double azimuth_rad = 0.0;  // 方位角，单位弧度（Azimuth Angle in Radians）
+    double elevation_rad = 0.0;  // 俯仰角，单位弧度（Elevation Angle in Radians）
+    double line_of_sight_rate_rad_s = 0.0;  // 视线角速度，单位 rad/s（Line-of-Sight Rate in rad/s）
+    vec3 los_unit_wcs{};  // 视线单位向量（世界坐标系）（Line-of-Sight Unit Vector in WCS）
 };
 
+// 导引头状态（Seeker State）
 struct seeker_state {
-    bool has_lock = false;
-    double last_seen_time_s = -1.0;
+    bool has_lock = false;  // 是否已锁定（Whether Lock is Established）
+    double last_seen_time_s = -1.0;  // 上次见到目标的时间，单位秒（Last Seen Time in Seconds）
 };
 
+// 导引头模型（Seeker Model）
 struct seeker {
-    double azimuth_fov_rad = 25.0 * constants::deg_to_rad;
-    double elevation_fov_rad = 25.0 * constants::deg_to_rad;
-    double reacquire_delay_s = 0.5;
-    double angle_noise_std_rad = 0.1 * constants::deg_to_rad;
-    bool stochastic = false;
-    mutable std::mt19937 rng{7};
+    double azimuth_fov_rad = 25.0 * constants::deg_to_rad;  // 方位视场角，单位弧度（Azimuth Field of View in Radians）
+    double elevation_fov_rad = 25.0 * constants::deg_to_rad;  // 俯仰视场角，单位弧度（Elevation Field of View in Radians）
+    double reacquire_delay_s = 0.5;  // 重新捕获延迟，单位秒（Reacquire Delay in Seconds）
+    double angle_noise_std_rad = 0.1 * constants::deg_to_rad;  // 角度噪声标准差，单位弧度（Angle Noise Standard Deviation in Radians）
+    bool stochastic = false;  // 是否启用随机性（Whether Stochastic Noise is Enabled）
+    mutable std::mt19937 rng{7};  // 随机数生成器（Random Number Generator）
 
+    // 观测目标并生成测量（Observe Target and Generate Measurement）
     seeker_measurement observe(const engagement_geometry& geom,
                                const euler_angles& weapon_attitude,
                                seeker_state& state,

@@ -11,43 +11,43 @@ namespace xsf_math {
 
 inline constexpr std::size_t invalid_target_index = std::numeric_limits<std::size_t>::max();
 
-// 用于关联的航迹状态
+// 用于关联的航迹状态（Track state for association）
 struct track_state {
     int    id = -1;
     vec3   position;
     vec3   velocity;
-    double position_covariance[3] = {100.0, 100.0, 100.0};  // 对角元素
+    double position_covariance[3] = {100.0, 100.0, 100.0};  // 对角元素（Diagonal elements）
 };
 
-// 检测量测
+// 检测量测（Detection measurement）
 struct detection {
     vec3   position;
     double meas_noise[3] = {100.0, 100.0, 100.0};
-    std::size_t target_index = invalid_target_index;  // 来自搜索/调度层的目标身份
+    std::size_t target_index = invalid_target_index;  // 来自搜索/调度层的目标身份（Target identity from search/scheduler layer）
 
     bool has_target_index() const { return target_index != invalid_target_index; }
 };
 
-// 关联结果
+// 关联结果（Association result）
 struct association_result {
-    int track_id    = -1;   // -1 表示未关联
+    int track_id    = -1;   // -1 表示未关联（-1 means unassociated）
     int detection_idx = -1;
-    double distance = 0.0;  // 马氏距离或欧氏距离
+    double distance = 0.0;  // 马氏距离或欧氏距离（Mahalanobis or Euclidean distance）
 };
 
-// 带门限的最近邻关联
+// 带门限的最近邻关联（Gated nearest-neighbor association）
 struct nearest_neighbor_associator {
 
-    double gate_threshold = 16.0;  // 卡方门限（3 自由度，16.0 约等于 99.7%）
+    double gate_threshold = 16.0;  // 卡方门限（3 自由度，16.0 约等于 99.7%）（Chi-square gate threshold, 3-DOF, 16.0 ≈ 99.7%）
 
-    // 计算航迹预测位置与量测之间的马氏距离
+    // 计算航迹预测位置与量测之间的马氏距离（Compute Mahalanobis distance between track prediction and measurement）
     static double mahalanobis_distance(const track_state& trk,
                                        const detection& det) {
         double dx = det.position.x - trk.position.x;
         double dy = det.position.y - trk.position.y;
         double dz = det.position.z - trk.position.z;
 
-        // 合成协方差 = 航迹协方差 + 量测噪声（对角）
+        // 合成协方差 = 航迹协方差 + 量测噪声（对角）（Combined covariance = track covariance + measurement noise, diagonal）
         double sx = trk.position_covariance[0] + det.meas_noise[0];
         double sy = trk.position_covariance[1] + det.meas_noise[1];
         double sz = trk.position_covariance[2] + det.meas_noise[2];
@@ -59,7 +59,7 @@ struct nearest_neighbor_associator {
         return (dx*dx/sx) + (dy*dy/sy) + (dz*dz/sz);
     }
 
-    // 将量测与航迹关联（贪心最近邻）
+    // 将量测与航迹关联（贪心最近邻）（Associate detections to tracks using greedy nearest-neighbor）
     std::vector<association_result> associate(
             const std::vector<track_state>& tracks,
             const std::vector<detection>& detections) const {
@@ -91,7 +91,7 @@ struct nearest_neighbor_associator {
             }
         }
 
-        // 输出未关联的量测
+        // 输出未关联的量测（Output unassociated detections）
         for (size_t d = 0; d < detections.size(); ++d) {
             if (!det_used[d]) {
                 association_result r;
@@ -106,10 +106,10 @@ struct nearest_neighbor_associator {
     }
 };
 
-// M-of-N 航迹确认逻辑
+// M-of-N 航迹确认逻辑（M-of-N track confirmation logic）
 struct m_of_n_logic {
-    int m = 3;  // 所需命中次数
-    int n = 5;  // 窗口大小
+    int m = 3;  // 所需命中次数（Required hits）
+    int n = 5;  // 窗口大小（Window size）
 
     struct state {
         int hits = 0;
@@ -136,9 +136,9 @@ struct m_of_n_logic {
 
 private:
     void trim(state& s) const {
-        // 简单滑动窗口近似
+        // 简单滑动窗口近似（Simple sliding window approximation）
         while (s.total > n) {
-            // 假设最旧条目按比例命中
+            // 假设最旧条目按比例命中（Assume oldest entry was hit proportionally）
             double hit_rate = (s.total > 0) ? static_cast<double>(s.hits) / s.total : 0.0;
             if (hit_rate > 0.5 && s.hits > 0) s.hits--;
             s.total--;

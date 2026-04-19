@@ -9,57 +9,67 @@
 
 namespace xsf_math {
 
-// 跟踪行为层：航迹管理控制器。
+// 跟踪行为层：航迹管理控制器（Tracking behavior layer: track manager controller）。
 //
 // 参考 xsf-core XsfDefaultSensorTracker::State 的组织：
 // - 每条活跃航迹维护一个独立滤波器 + 检测历史位流 + 失联计数；
 // - 确认阶段走 M/N 逻辑；
 // - 失联达到阈值后丢弃。
 // 本模块不负责调度，只负责“量测来了以后如何把它落到航迹上”。
+// Reference xsf-core XsfDefaultSensorTracker::State organization:
+// - Each active track maintains an independent filter + detection history bitstream + miss counter;
+// - Confirmation uses M/N logic;
+// - Drop after misses exceed threshold.
+// This module is not responsible for scheduling; it only handles "how to assign measurement to track".
 
+// 航迹记录（Track record）
 struct track_record {
-    int                   id = -1;
-    kalman_filter_6state  kf{};
-    m_of_n_logic::state   mofn{};
-    int                   failures_until_drop = -1;  // -1 表示未初始化
-    unsigned int          detection_history_bits = 0;
-    double                last_update_time_s = 0.0;
-    bool                  confirmed = false;
-    std::size_t           target_index = invalid_target_index;
+    int                   id = -1;  // 航迹 ID（Track ID）
+    kalman_filter_6state  kf{};  // 卡尔曼滤波器（Kalman filter）
+    m_of_n_logic::state   mofn{};  // M/N 确认状态（M/N confirmation state）
+    int                   failures_until_drop = -1;  // -1 表示未初始化（Misses until drop, -1 means uninitialized）
+    unsigned int          detection_history_bits = 0;  // 检测历史位流（Detection history bitstream）
+    double                last_update_time_s = 0.0;  // 上次更新时间秒（Last update time in seconds）
+    bool                  confirmed = false;  // 是否已确认（Confirmed）
+    std::size_t           target_index = invalid_target_index;  // 目标索引（Target index）
 
     bool has_target_index() const { return target_index != invalid_target_index; }
 };
 
+// 航迹管理参数（Track manager parameters）
 struct track_manager_params {
-    m_of_n_logic             mofn{};                   // 默认 m=3, n=5
-    nearest_neighbor_associator associator{};           // 含 gate_threshold
-    int                       drop_after_misses = 5;   // 连续未命中丢航迹
-    double                    initial_position_cov = 100.0;
-    double                    initial_velocity_cov = 25.0;
+    m_of_n_logic             mofn{};                   // 默认 m=3, n=5（Default M/N logic）
+    nearest_neighbor_associator associator{};           // 含 gate_threshold（Nearest-neighbor associator with gate threshold）
+    int                       drop_after_misses = 5;   // 连续未命中丢航迹（Drop track after consecutive misses）
+    double                    initial_position_cov = 100.0;  // 初始位置协方差（Initial position covariance）
+    double                    initial_velocity_cov = 25.0;  // 初始速度协方差（Initial velocity covariance）
 };
 
+// 航迹管理更新结果（Track manager update result）
 struct track_manager_update_result {
+    // 已确认航迹绑定（Confirmed track binding）
     struct confirmed_track_binding {
-        int         track_id = -1;
-        std::size_t target_index = invalid_target_index;
+        int         track_id = -1;  // 航迹 ID（Track ID）
+        std::size_t target_index = invalid_target_index;  // 目标索引（Target index）
 
         bool has_target_index() const { return target_index != invalid_target_index; }
     };
 
-    std::vector<int>                unassociated_detection_indices;
-    std::vector<int>                dropped_track_ids;
-    std::vector<int>                confirmed_track_ids;   // 本次更新后新确认的航迹
-    std::vector<confirmed_track_binding> confirmed_tracks; // 兼容 scheduler 所需的身份回传
+    std::vector<int>                unassociated_detection_indices;  // 未关联检测索引（Unassociated detection indices）
+    std::vector<int>                dropped_track_ids;  // 已丢弃航迹 ID（Dropped track IDs）
+    std::vector<int>                confirmed_track_ids;   // 本次更新后新确认的航迹（Newly confirmed track IDs after this update）
+    std::vector<confirmed_track_binding> confirmed_tracks; // 兼容 scheduler 所需的身份回传（Confirmed tracks for scheduler identity callback）
 };
 
+// 航迹管理器（Track manager）
 struct track_manager {
     track_manager_params params{};
 
-    // ---- 状态 ----
-    std::unordered_map<int, track_record> tracks;
-    int next_track_id = 1;
+    // ---- 状态（State）----
+    std::unordered_map<int, track_record> tracks;  // 航迹表（Track table）
+    int next_track_id = 1;  // 下一个航迹 ID（Next track ID）
 
-    // 从一个新量测起始一条试探航迹。
+    // 从一个新量测起始一条试探航迹（Start a tentative track from a new measurement）
     int start_tentative_track(const detection& det, double sim_time_s, const vec3& initial_velocity = {}) {
         track_record rec;
         rec.id = next_track_id++;
@@ -80,14 +90,16 @@ struct track_manager {
         return next_track_id - 1;
     }
 
-    // 按新一组量测推进所有航迹。
+    // 按新一组量测推进所有航迹（Update all tracks with new measurements）。
     // 流程：(1) 对每条航迹预测；(2) 组装 track_state 与 detection 交给 associator；
     // (3) 对每条航迹喂命中或失配；(4) 淘汰超时未命中的航迹。
+    // Process: (1) Predict each track; (2) Assemble track_state and detection for associator;
+    // (3) Feed hit or miss to each track; (4) Drop tracks with too many consecutive misses.
     track_manager_update_result update(const std::vector<detection>& detections,
                                         double sim_time_s) {
         track_manager_update_result result;
 
-        // 1) 预测步，并构造 track_state 列表
+        // 1) 预测步，并构造 track_state 列表（Prediction step and build track_state list）
         std::vector<track_state> track_states;
         std::vector<int>         track_ids_ordered;
         track_states.reserve(tracks.size());
@@ -106,10 +118,10 @@ struct track_manager {
             track_ids_ordered.push_back(rec.id);
         }
 
-        // 2) 关联
+        // 2) 关联（Association）
         auto assoc = params.associator.associate(track_states, detections);
 
-        // 3) 按关联结果更新滤波器 + M/N
+        // 3) 按关联结果更新滤波器 + M/N（Update filter and M/N according to association result）
         std::vector<bool> detection_used(detections.size(), false);
         for (const auto& a : assoc) {
             if (a.track_id < 0) continue;  // 未关联量测留到后面
@@ -138,7 +150,7 @@ struct track_manager {
             rec.last_update_time_s = sim_time_s;
         }
 
-        // 4) 汇报未关联量测 + 丢弃超时航迹
+        // 4) 汇报未关联量测 + 丢弃超时航迹（Report unassociated detections and drop timed-out tracks）
         for (std::size_t d = 0; d < detections.size(); ++d) {
             if (!detection_used[d]) result.unassociated_detection_indices.push_back(static_cast<int>(d));
         }
@@ -154,7 +166,7 @@ struct track_manager {
         return result;
     }
 
-    // 查询接口。
+    // 查询接口（Query interface）
     const track_record* find(int track_id) const {
         auto it = tracks.find(track_id);
         return (it == tracks.end()) ? nullptr : &it->second;

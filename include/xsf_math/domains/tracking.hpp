@@ -1,6 +1,7 @@
 #pragma once
 
-// 跟踪估计业务域入口。
+// 跟踪估计业务域入口 (Tracking and estimation domain header)
+// Kalman filters, interacting multiple model, and track association
 
 #include "../tracking/kalman_filter.hpp"
 #include "../tracking/extended_kalman_filter.hpp"

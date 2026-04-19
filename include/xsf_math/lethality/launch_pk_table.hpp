@@ -13,35 +13,41 @@
 
 namespace xsf_math {
 
+// 发射杀伤概率查询请求（Launch Pk lookup request）
 struct launch_pk_request {
-    std::string launcher_type;
-    std::string target_type;
-    double altitude_m         = 0.0;
-    double target_speed_mps   = 0.0;
-    double down_range_m       = 0.0;
-    double cross_range_m      = 0.0;
+    std::string launcher_type;     // 发射平台类型（Launcher type）
+    std::string target_type;       // 目标类型（Target type）
+    double altitude_m         = 0.0;   // 目标高度（Altitude），单位 m
+    double target_speed_mps   = 0.0;   // 目标速度（Target speed），单位 m/s
+    double down_range_m       = 0.0;   // 纵距（Down-range distance），单位 m
+    double cross_range_m      = 0.0;   // 横距（Cross-range distance），单位 m
 };
 
+// 纵距-横距（Cross-Range / Down-Range, CR/DR）杀伤概率表 (CR/DR Pk table)
 struct launch_pk_crdr_table {
-    std::vector<double> cross_ranges_m;
-    std::vector<double> down_ranges_m;
-    std::vector<std::vector<double>> pk_grid; // [down_range][cross_range]
+    std::vector<double> cross_ranges_m;                       // 横距样本点（Cross-range samples），单位 m
+    std::vector<double> down_ranges_m;                        // 纵距样本点（Down-range samples），单位 m
+    std::vector<std::vector<double>> pk_grid; // 杀伤概率网格（Pk grid）[down_range][cross_range]
 
+    // 二维查表评估 Pk（2D table lookup for Pk）
     double evaluate(double down_range_m, double cross_range_m) const {
         return table_lookup_2d(down_ranges_m, cross_ranges_m, pk_grid, down_range_m, cross_range_m);
     }
 };
 
+// 发射杀伤概率条目（Launch Pk entry for a given altitude and speed）
 struct launch_pk_entry {
-    double altitude_m       = 0.0;
-    double target_speed_mps = 0.0;
-    launch_pk_crdr_table table;
+    double altitude_m       = 0.0;   // 高度（Altitude），单位 m
+    double target_speed_mps = 0.0;   // 目标速度（Target speed），单位 m/s
+    launch_pk_crdr_table table;      // 对应的 CR/DR 杀伤概率表（CR/DR Pk table）
 };
 
+// 发射杀伤概率表集合（Launch Pk table set）
 class launch_pk_table_set {
 public:
-    double default_pk = 0.0;
+    double default_pk = 0.0;  // 默认杀伤概率（Default Pk）
 
+    // 从核心数据文件加载单张表（Load a single table from core data file）
     bool load_core_file(const std::string& file_path, std::string* error = nullptr) {
         std::ifstream input(file_path);
         if (!input) {
@@ -128,6 +134,7 @@ public:
         return true;
     }
 
+    // 根据请求查询杀伤概率（Evaluate Pk for a given request）
     double evaluate(const launch_pk_request& request) const {
         auto it = tables_.find(std::make_pair(request.launcher_type, request.target_type));
         if (it == tables_.end() || it->second.empty()) return default_pk;
@@ -164,12 +171,14 @@ private:
     using key_type = std::pair<std::string, std::string>;
     std::map<key_type, std::vector<launch_pk_entry>> tables_;
 
+    // 去除字符串首尾空白（Trim whitespace from string）
     static void trim(std::string& text) {
         auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
         text.erase(text.begin(), std::find_if(text.begin(), text.end(), not_space));
         text.erase(std::find_if(text.rbegin(), text.rend(), not_space).base(), text.end());
     }
 
+    // 从文件头读取键值对（Read key-value pair from file header）
     template<typename T>
     static bool read_header(std::ifstream& input,
                             const std::string& expected_name,
@@ -203,6 +212,7 @@ private:
         return true;
     }
 
+    // 字符串类型特化：读取文件头（String overload: read header）
     static bool read_header(std::ifstream& input,
                             const std::string& expected_name,
                             std::string& value,
@@ -227,6 +237,7 @@ private:
         return true;
     }
 
+    // 长度单位转换（Length unit conversion）
     static double convert_length(double value, const std::string& units) {
         std::string u = lowercase(units);
         if (u == "m" || u == "meter" || u == "meters") return value;
@@ -236,6 +247,7 @@ private:
         return value;
     }
 
+    // 速度单位转换（Speed unit conversion）
     static double convert_speed(double value, const std::string& units) {
         std::string u = lowercase(units);
         if (u == "m/s" || u == "mps" || u == "meters/second") return value;
@@ -244,6 +256,7 @@ private:
         return value;
     }
 
+    // 转换为小写（Convert string to lowercase）
     static std::string lowercase(std::string text) {
         std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
             return static_cast<char>(std::tolower(ch));
@@ -251,6 +264,7 @@ private:
         return text;
     }
 
+    // 在指定高度下按速度插值评估（Evaluate at given altitude, interpolating over speed）
     static double evaluate_at_speed(const std::vector<launch_pk_entry>& entries,
                                     double altitude_m,
                                     const launch_pk_request& request) {
@@ -286,6 +300,7 @@ private:
         return lerp(v0, v1, t);
     }
 
+    // 在指定高度下评估（Evaluate at given altitude）
     static double evaluate_at_altitude(const std::vector<launch_pk_entry>& entries,
                                        double altitude_m,
                                        const launch_pk_request& request) {

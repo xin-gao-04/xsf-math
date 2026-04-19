@@ -7,46 +7,54 @@
 
 namespace xsf_math {
 
+// 刚体输入（Rigid Body Inputs）
 struct rigid_body_inputs {
-    vec3 force_body_n{};
-    vec3 moment_body_nm{};
-    vec3 external_accel_wcs{};
-    double mass_flow_kgps = 0.0;
+    vec3 force_body_n{};  // 机体坐标系力，单位牛顿（Force in Body Coordinates, Newtons）
+    vec3 moment_body_nm{};  // 机体坐标系力矩，单位牛米（Moment in Body Coordinates, Newton-meters）
+    vec3 external_accel_wcs{};  // 世界坐标系外部加速度（External Acceleration in WCS）
+    double mass_flow_kgps = 0.0;  // 质量流量，单位 kg/s（Mass Flow Rate in kg/s）
 };
 
+// 刚体状态（Rigid Body State）
 struct rigid_body_state {
-    vec3 position_wcs{};
-    vec3 velocity_wcs{};
-    quaternion attitude_body_to_wcs{};
-    vec3 body_rates_radps{};
-    double mass_kg = 1.0;
-    vec3 inertia_diag_kgm2{1.0, 1.0, 1.0};
+    vec3 position_wcs{};  // 世界坐标系位置（Position in WCS）
+    vec3 velocity_wcs{};  // 世界坐标系速度（Velocity in WCS）
+    quaternion attitude_body_to_wcs{};  // 机体到世界坐标系的姿态四元数（Attitude Quaternion from Body to WCS）
+    vec3 body_rates_radps{};  // 机体角速度，单位 rad/s（Body Angular Rates in rad/s）
+    double mass_kg = 1.0;  // 质量，单位千克（Mass in Kilograms）
+    vec3 inertia_diag_kgm2{1.0, 1.0, 1.0};  // 惯性张量对角线分量，单位 kg·m²（Inertia Tensor Diagonal Components in kg·m²）
 
+    // 计算机体坐标系速度（Compute Body-Frame Velocity）
     vec3 body_velocity_mps() const {
         return attitude_body_to_wcs.inverse().rotate(velocity_wcs);
     }
 };
 
+// 刚体状态导数（Rigid Body State Derivative）
 struct rigid_body_derivative {
-    vec3 position_dot_wcs{};
-    vec3 velocity_dot_wcs{};
-    quaternion attitude_dot{};
-    vec3 body_rate_dot_radps{};
-    double mass_dot_kgps = 0.0;
+    vec3 position_dot_wcs{};  // 位置变化率（Position Derivative）
+    vec3 velocity_dot_wcs{};  // 速度变化率（Velocity Derivative）
+    quaternion attitude_dot{};  // 姿态变化率（Attitude Derivative）
+    vec3 body_rate_dot_radps{};  // 角速度变化率，单位 rad/s²（Angular Rate Derivative in rad/s²）
+    double mass_dot_kgps = 0.0;  // 质量变化率，单位 kg/s（Mass Derivative in kg/s）
 };
 
+// 世界坐标系重力加速度向量（Gravity Acceleration Vector in WCS）
 inline vec3 gravity_wcs() {
     return {0.0, 0.0, constants::gravity_mps2};
 }
 
+// 将机体坐标系向量转换到世界坐标系（Convert Body-Frame Vector to WCS）
 inline vec3 body_to_wcs(const rigid_body_state& state, const vec3& body_vec) {
     return state.attitude_body_to_wcs.rotate(body_vec);
 }
 
+// 将世界坐标系向量转换到机体坐标系（Convert WCS Vector to Body Frame）
 inline vec3 wcs_to_body(const rigid_body_state& state, const vec3& wcs_vec) {
     return state.attitude_body_to_wcs.inverse().rotate(wcs_vec);
 }
 
+// 计算刚体动力学导数（Evaluate Rigid Body Dynamics Derivative）
 inline rigid_body_derivative evaluate_rigid_body_dynamics(const rigid_body_state& state,
                                                           const rigid_body_inputs& input) {
     rigid_body_derivative out;
@@ -74,7 +82,9 @@ inline rigid_body_derivative evaluate_rigid_body_dynamics(const rigid_body_state
     return out;
 }
 
+// 六自由度积分器（6-DOF Integrator）
 struct six_dof_integrator {
+    // 推进刚体状态一步（Step Rigid Body State Forward by One Time Step）
     void step(rigid_body_state& state,
               const rigid_body_inputs& input,
               double dt_s) const {

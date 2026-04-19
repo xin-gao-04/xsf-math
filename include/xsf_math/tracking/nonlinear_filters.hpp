@@ -11,19 +11,21 @@
 
 namespace xsf_math {
 
+// 无迹卡尔曼滤波器 6 状态（Unscented Kalman filter, 6-state）
 struct ukf_filter_6state {
     static constexpr int state_dim = 6;
     static constexpr int sigma_count = 2 * state_dim + 1;
 
     double state[state_dim] = {};
     double P[state_dim][state_dim] = {};
-    double alpha = 0.3;
-    double beta = 2.0;
-    double kappa = 0.0;
-    double process_noise_accel = 2.0;
-    bool initialized = false;
-    double last_time_s = 0.0;
+    double alpha = 0.3;  //  Sigma 点 spread 参数（Sigma point spread parameter）
+    double beta = 2.0;  // 先验分布参数（Prior distribution parameter, optimal for Gaussian）
+    double kappa = 0.0;  // 次级 scaling 参数（Secondary scaling parameter）
+    double process_noise_accel = 2.0;  // 过程噪声加速度（Process noise acceleration）
+    bool initialized = false;  // 是否已初始化（Whether initialized）
+    double last_time_s = 0.0;  // 上次更新时间秒（Last update time in seconds）
 
+    // 初始化（Initialize）
     void init(double time_s, const vec3& pos, const vec3& vel = {}) {
         state[0] = pos.x; state[1] = pos.y; state[2] = pos.z;
         state[3] = vel.x; state[4] = vel.y; state[5] = vel.z;
@@ -36,6 +38,7 @@ struct ukf_filter_6state {
         last_time_s = time_s;
     }
 
+    // 预测步骤（Prediction step）
     void predict(double time_s) {
         if (!initialized) return;
         double dt = time_s - last_time_s;
@@ -59,6 +62,7 @@ struct ukf_filter_6state {
         last_time_s = time_s;
     }
 
+    // 位置量测更新（Update with position measurement）
     void update_position(double time_s, const vec3& meas, double sigma_pos_m) {
         if (!initialized) {
             init(time_s, meas);
@@ -103,6 +107,7 @@ struct ukf_filter_6state {
         apply_update({meas.x - z_mean[0], meas.y - z_mean[1], meas.z - z_mean[2]}, Pxz, S, S_inv);
     }
 
+    // 球坐标量测更新（Update with spherical measurement）
     void update_spherical(double time_s, const spherical_measurement& meas) {
         if (!initialized) {
             double ce = std::cos(meas.elevation_rad);
@@ -164,21 +169,28 @@ struct ukf_filter_6state {
                      Pxz, S, S_inv);
     }
 
+    // 获取估计位置（Get estimated position）
     vec3 position() const { return {state[0], state[1], state[2]}; }
+    // 获取估计速度（Get estimated velocity）
     vec3 velocity() const { return {state[3], state[4], state[5]}; }
 
 private:
+    // 计算 lambda 参数（Compute lambda parameter）
     double lambda() const { return alpha * alpha * (state_dim + kappa) - state_dim; }
+    // 计算 gamma 参数（Compute gamma parameter）
     double gamma() const { return std::sqrt(state_dim + lambda()); }
+    // 计算均值权重（Compute mean weight）
     double mean_weight(int sigma_idx) const {
         return (sigma_idx == 0) ? lambda() / (state_dim + lambda())
                                 : 1.0 / (2.0 * (state_dim + lambda()));
     }
+    // 计算协方差权重（Compute covariance weight）
     double covariance_weight(int sigma_idx) const {
         return (sigma_idx == 0) ? mean_weight(0) + (1.0 - alpha * alpha + beta)
                                 : mean_weight(sigma_idx);
     }
 
+    // 构建 Sigma 点（Build sigma points）
     void build_sigma_points(double sigma[sigma_count][state_dim]) const {
         for (int k = 0; k < sigma_count; ++k)
             for (int i = 0; i < state_dim; ++i)
@@ -192,6 +204,7 @@ private:
         }
     }
 
+    // 从 Sigma 点恢复均值和协方差（Recover mean and covariance from sigma points）
     void recover_mean_and_covariance(const double sigma[sigma_count][state_dim]) {
         std::fill(std::begin(state), std::end(state), 0.0);
         for (int k = 0; k < sigma_count; ++k)
@@ -211,16 +224,19 @@ private:
         }
     }
 
+    // 从状态向量提取量测（Extract measurement from state）
     static spherical_measurement measurement_from_state(const double x[state_dim]) {
         return extended_kalman_filter_6state::state_to_measurement(x);
     }
 
+    // 角度归一化到 [-pi, pi]（Wrap angle to [-pi, pi]）
     static double wrap_angle(double rad) {
         while (rad > constants::pi) rad -= constants::two_pi;
         while (rad < -constants::pi) rad += constants::two_pi;
         return rad;
     }
 
+    // 应用卡尔曼更新（Apply Kalman update）
     void apply_update(const std::array<double, 3>& residual,
                       const double Pxz[state_dim][3],
                       const double S[3][3],
@@ -251,6 +267,7 @@ private:
                 P[i][j] -= KSKT[i][j];
     }
 
+    // 3x3 矩阵求逆（Invert 3x3 matrix）
     static void invert_3x3(const double m[3][3], double inv[3][3]) {
         double det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
                      m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
@@ -273,18 +290,21 @@ private:
     }
 };
 
+// 粒子航迹状态（Particle track state）
 struct particle_track_state {
     vec3 position{};
     vec3 velocity{};
     double weight = 0.0;
 };
 
+// 粒子滤波器 6 状态（Particle filter, 6-state）
 struct particle_filter_6state {
     std::vector<particle_track_state> particles;
-    double process_noise_position_m = 5.0;
-    double process_noise_velocity_mps = 1.0;
-    std::mt19937 rng{42u};
+    double process_noise_position_m = 5.0;  // 位置过程噪声米（Position process noise in meters）
+    double process_noise_velocity_mps = 1.0;  // 速度过程噪声 m/s（Velocity process noise in m/s）
+    std::mt19937 rng{42u};  // 随机数生成器（Random number generator）
 
+    // 初始化粒子群（Initialize particle set）
     void init(std::size_t count,
               const vec3& position,
               const vec3& velocity = {},
@@ -304,6 +324,7 @@ struct particle_filter_6state {
         }
     }
 
+    // 预测步骤（Prediction step）
     void predict(double dt_s) {
         if (dt_s <= 0.0) return;
         std::normal_distribution<double> pos_noise(0.0, process_noise_position_m);
@@ -319,6 +340,7 @@ struct particle_filter_6state {
         }
     }
 
+    // 位置量测更新（Update with position measurement）
     void update_position(const vec3& measurement, double sigma_pos_m) {
         if (particles.empty()) return;
         double sigma2 = std::max(sigma_pos_m * sigma_pos_m, 1.0e-6);
@@ -338,12 +360,14 @@ struct particle_filter_6state {
         if (ess < 0.5 * static_cast<double>(particles.size())) resample();
     }
 
+    // 加权估计位置（Weighted estimated position）
     vec3 estimate_position() const {
         vec3 out;
         for (const auto& p : particles) out += p.position * p.weight;
         return out;
     }
 
+    // 加权估计速度（Weighted estimated velocity）
     vec3 estimate_velocity() const {
         vec3 out;
         for (const auto& p : particles) out += p.velocity * p.weight;
@@ -351,6 +375,7 @@ struct particle_filter_6state {
     }
 
 private:
+    // 重采样（低权重粒子替换）（Resample: replace low-weight particles）
     void resample() {
         if (particles.empty()) return;
         std::vector<particle_track_state> resampled;

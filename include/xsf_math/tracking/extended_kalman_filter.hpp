@@ -10,20 +10,23 @@
 
 namespace xsf_math {
 
+// 球坐标量测（Spherical measurement）
 struct spherical_measurement {
     double range_m = 0.0;
     double azimuth_rad = 0.0;
     double elevation_rad = 0.0;
 };
 
+// 扩展卡尔曼滤波器 6 状态（Extended Kalman filter, 6-state）
 struct extended_kalman_filter_6state {
     double state[6] = {};
     double P[6][6] = {};
-    double process_noise[3] = {1.0, 1.0, 1.0};
-    double meas_noise[3] = {100.0, 1.0e-4, 1.0e-4};  // range / az / el
-    bool initialized = false;
-    double last_time = 0.0;
+    double process_noise[3] = {1.0, 1.0, 1.0};  // 过程噪声（Process noise）
+    double meas_noise[3] = {100.0, 1.0e-4, 1.0e-4};  // range / az / el 量测噪声（Measurement noise: range / azimuth / elevation）
+    bool initialized = false;  // 是否已初始化（Whether initialized）
+    double last_time = 0.0;  // 上次更新时间（Last update time）
 
+    // 初始化（Initialize）
     void init(double time, const vec3& pos, const vec3& vel = {0, 0, 0}) {
         state[0] = pos.x; state[1] = pos.y; state[2] = pos.z;
         state[3] = vel.x; state[4] = vel.y; state[5] = vel.z;
@@ -36,6 +39,7 @@ struct extended_kalman_filter_6state {
         last_time = time;
     }
 
+    // 预测步骤（Prediction step）
     void predict(double time) {
         if (!initialized) return;
         double dt = time - last_time;
@@ -66,6 +70,7 @@ struct extended_kalman_filter_6state {
         last_time = time;
     }
 
+    // 状态向量转球坐标量测（Convert state to spherical measurement）
     static spherical_measurement state_to_measurement(const double x[6]) {
         spherical_measurement z;
         double px = x[0], py = x[1], pz = x[2];
@@ -76,6 +81,7 @@ struct extended_kalman_filter_6state {
         return z;
     }
 
+    // 计算量测雅可比矩阵（Compute measurement Jacobian）
     static void measurement_jacobian(const double x[6], double H[3][6]) {
         std::memset(H, 0, 18 * sizeof(double));
         double px = x[0], py = x[1], pz = x[2];
@@ -92,6 +98,7 @@ struct extended_kalman_filter_6state {
         H[2][2] = -rho / std::max(r2, 1.0e-12);
     }
 
+    // 球坐标量测更新（Update with spherical measurement）
     void update_spherical(double time, const spherical_measurement& meas) {
         if (!initialized) {
             double ce = std::cos(meas.elevation_rad);
@@ -166,10 +173,13 @@ struct extended_kalman_filter_6state {
         std::memcpy(P, Pnew, sizeof(P));
     }
 
+    // 获取估计位置（Get estimated position）
     vec3 position() const { return {state[0], state[1], state[2]}; }
+    // 获取估计速度（Get estimated velocity）
     vec3 velocity() const { return {state[3], state[4], state[5]}; }
 
 private:
+    // 3x3 矩阵求逆（Invert 3x3 matrix）
     static void invert_3x3(const double m[3][3], double inv[3][3]) {
         double det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
                      m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +

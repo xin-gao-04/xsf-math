@@ -7,54 +7,64 @@
 
 namespace xsf_math {
 
-// 原子控制器集合。
+// 原子控制器集合 (Collection of atomic flight controllers).
 
+// 拉起目标参数 (Pull-up maneuver target parameters).
 struct pull_up_target {
-    double target_altitude_m = 0.0; // 目标高度
+    double target_altitude_m = 0.0; // 目标高度 (target altitude)
 };
 
+// 协调转弯目标参数 (Coordinated turn target parameters).
 struct coordinated_turn_target {
-    double target_heading_rad = 0.0; // 目标航向
+    double target_heading_rad = 0.0; // 目标航向 (target heading)
 };
 
+// 下降目标参数 (Descent maneuver target parameters).
 struct descent_target {
-    double target_altitude_m = 0.0; // 目标高度
+    double target_altitude_m = 0.0; // 目标高度 (target altitude)
 };
 
+// 平飞保持目标参数 (Level hold target parameters).
 struct level_hold_target {
-    double target_altitude_m = 0.0; // 目标高度
+    double target_altitude_m = 0.0; // 目标高度 (target altitude)
 };
 
+// 航点跟踪目标参数 (Waypoint tracking target parameters).
 struct waypoint_track_target {
-    vec3 target_position_wcs{}; // 目标航点位置
-    double arrive_radius_m = 50.0; // 进入该半径后认为已到达
+    vec3 target_position_wcs{}; // 目标航点位置 (target waypoint position in WCS)
+    double arrive_radius_m = 50.0; // 进入该半径后认为已到达 (radius within which waypoint is considered reached)
 };
 
+// 下滑道进近目标参数 (Approach glideslope target parameters).
 struct approach_glideslope_target {
-    vec3 threshold_position_wcs{};                                 // 跑道入口/下滑道参考点
-    double glide_slope_rad = 3.0 * constants::deg_to_rad;         // 下滑道角
-    double runway_heading_rad = 0.0;                              // 跑道方向
-    double intercept_distance_m = 4000.0;                         // 参考进近距离
+    vec3 threshold_position_wcs{};                                 // 跑道入口/下滑道参考点 (runway threshold / glideslope reference point in WCS)
+    double glide_slope_rad = 3.0 * constants::deg_to_rad;         // 下滑道角 (glide slope angle)
+    double runway_heading_rad = 0.0;                              // 跑道方向 (runway heading)
+    double intercept_distance_m = 4000.0;                         // 参考进近距离 (reference intercept distance)
 };
 
+// 航向保持目标参数 (Heading hold target parameters).
 struct heading_hold_target {
-    double target_heading_rad = 0.0; // 目标航向
+    double target_heading_rad = 0.0; // 目标航向 (target heading)
 };
 
+// 拉平目标参数 (Flare maneuver target parameters).
 struct flare_target {
-    double flare_altitude_m = 15.0;                  // 开始拉平的高度门限
-    double touchdown_altitude_m = 0.0;              // 接地点高度
-    double target_sink_rate_mps = -1.0;             // 末段希望收敛到的下沉率，向下为负
+    double flare_altitude_m = 15.0;                  // 开始拉平的高度门限 (altitude threshold to begin flare)
+    double touchdown_altitude_m = 0.0;              // 接地点高度 (touchdown altitude)
+    double target_sink_rate_mps = -1.0;             // 末段希望收敛到的下沉率 (target sink rate in final phase)，向下为负 (negative downward)
 };
 
 namespace detail {
 
+// 根据参考值符号返回带幅度的符号值 (Return signed magnitude based on reference sign).
 inline double sign_with_magnitude(double magnitude, double reference) {
     if (reference > 0.0) return magnitude;
     if (reference < 0.0) return -magnitude;
     return 0.0;
 }
 
+// 构造不可用控制命令 (Construct an unavailable/unusable control command).
 inline flight_control_command make_unavailable_command(const flight_kinematic_state& state,
                                                        const flight_control_limits& limits) {
     flight_control_command command;
@@ -70,6 +80,7 @@ inline flight_control_command make_unavailable_command(const flight_kinematic_st
     return command;
 }
 
+// 将加速度限制在最大指令加速度范围内 (Clamp acceleration to maximum commanded acceleration limits).
 inline double clamp_accel(double accel_mps2, const flight_control_limits& limits, bool& saturated) {
     return clamp_with_flag(accel_mps2,
                            -max_commanded_accel_mps2(limits),
@@ -77,6 +88,7 @@ inline double clamp_accel(double accel_mps2, const flight_control_limits& limits
                            saturated);
 }
 
+// 高度制导命令计算 (Altitude guidance command computation).
 inline flight_control_command altitude_guidance_command(const flight_kinematic_state& state,
                                                         double commanded_altitude_m,
                                                         const flight_control_limits& limits,
@@ -128,7 +140,8 @@ inline flight_control_command altitude_guidance_command(const flight_kinematic_s
         if (delta_pitch < 0.0) normal_accel = -normal_accel;
     }
 
-    // 引入重力偏置，避免高度保持时出现持续下沉。
+    // 引入重力偏置，避免高度保持时出现持续下沉
+    // (Introduce gravity bias to avoid sustained sink during altitude hold).
     normal_accel += std::cos(cur_fpa) * limits.gee_bias_g * constants::gravity_mps2;
     double vertical_accel = clamp_accel(-normal_accel, limits, command.saturated);
 
@@ -160,6 +173,7 @@ inline flight_control_command altitude_guidance_command(const flight_kinematic_s
     return command;
 }
 
+// 航迹倾角制导命令计算 (Flight path angle guidance command computation).
 inline flight_control_command flight_path_angle_guidance_command(const flight_kinematic_state& state,
                                                                  double commanded_fpa_rad,
                                                                  const flight_control_limits& limits,
@@ -218,6 +232,7 @@ inline flight_control_command flight_path_angle_guidance_command(const flight_ki
     return command;
 }
 
+// 航向改变命令计算 (Heading change guidance command computation).
 inline flight_control_command heading_change_command(const flight_kinematic_state& state,
                                                      double target_heading_rad,
                                                      const flight_control_limits& limits,
@@ -280,6 +295,7 @@ inline flight_control_command heading_change_command(const flight_kinematic_stat
     return command;
 }
 
+// 合并横向与纵向命令 (Merge lateral and vertical control commands).
 inline flight_control_command merge_commands(const flight_control_command& lateral,
                                              const flight_control_command& vertical) {
     flight_control_command merged = vertical;
@@ -296,7 +312,9 @@ inline flight_control_command merge_commands(const flight_control_command& later
 
 } // namespace detail
 
+// 拉起控制器 (Pull-up controller).
 struct pull_up_controller {
+    // 计算拉起控制命令 (Compute pull-up control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const pull_up_target& target,
                                    const flight_control_limits& limits,
@@ -305,7 +323,9 @@ struct pull_up_controller {
     }
 };
 
+// 协调转弯控制器 (Coordinated turn controller).
 struct coordinated_turn_controller {
+    // 计算协调转弯控制命令 (Compute coordinated turn control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const coordinated_turn_target& target,
                                    const flight_control_limits& limits,
@@ -314,7 +334,9 @@ struct coordinated_turn_controller {
     }
 };
 
+// 下降控制器 (Descent controller).
 struct descent_controller {
+    // 计算下降控制命令 (Compute descent control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const descent_target& target,
                                    const flight_control_limits& limits,
@@ -323,7 +345,9 @@ struct descent_controller {
     }
 };
 
+// 平飞保持控制器 (Level hold controller).
 struct level_hold_controller {
+    // 计算平飞保持控制命令 (Compute level hold control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const level_hold_target& target,
                                    const flight_control_limits& limits,
@@ -332,7 +356,9 @@ struct level_hold_controller {
     }
 };
 
+// 航点跟踪控制器 (Waypoint track controller).
 struct waypoint_track_controller {
+    // 计算航点跟踪控制命令 (Compute waypoint tracking control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const waypoint_track_target& target,
                                    const flight_control_limits& limits,
@@ -357,7 +383,9 @@ struct waypoint_track_controller {
     }
 };
 
+// 下滑道进近控制器 (Approach glideslope controller).
 struct approach_glideslope_controller {
+    // 计算下滑道进近控制命令 (Compute approach glideslope control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const approach_glideslope_target& target,
                                    const flight_control_limits& limits,
@@ -368,7 +396,7 @@ struct approach_glideslope_controller {
 
         const vec3 delta = target.threshold_position_wcs - state.position_wcs;
         const double horizontal_range_m = std::sqrt(delta.x * delta.x + delta.y * delta.y);
-        const double threshold_altitude_m = -target.threshold_position_wcs.z;
+        const double threshold_altitude_m = -target.threshold_position_wcs.z;  // WCS Z 向下取负得高度 (negate WCS Z to get altitude)
         const double commanded_altitude_m =
             threshold_altitude_m + std::max(horizontal_range_m, 0.0) * std::tan(target.glide_slope_rad);
 
@@ -388,7 +416,9 @@ struct approach_glideslope_controller {
     }
 };
 
+// 航向保持控制器 (Heading hold controller).
 struct heading_hold_controller {
+    // 计算航向保持控制命令 (Compute heading hold control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const heading_hold_target& target,
                                    const flight_control_limits& limits,
@@ -397,7 +427,9 @@ struct heading_hold_controller {
     }
 };
 
+// 拉平控制器 (Flare controller).
 struct flare_controller {
+    // 计算拉平控制命令 (Compute flare control command).
     flight_control_command compute(const flight_kinematic_state& state,
                                    const flare_target& target,
                                    const flight_control_limits& limits,
@@ -408,7 +440,8 @@ struct flare_controller {
 
         const double altitude_above_touchdown_m = state.altitude_m - target.touchdown_altitude_m;
         if (altitude_above_touchdown_m > target.flare_altitude_m) {
-            // 拉平窗口外维持较温和的目标下沉率。
+            // 拉平窗口外维持较温和的目标下沉率
+            // (Maintain a moderate target sink rate outside the flare window).
             const double speed = std::max(state.true_airspeed_mps, 1.0);
             const double commanded_fpa = std::asin(std::clamp(target.target_sink_rate_mps / speed, -1.0, 1.0));
             return detail::flight_path_angle_guidance_command(state, commanded_fpa, limits, dt_s);

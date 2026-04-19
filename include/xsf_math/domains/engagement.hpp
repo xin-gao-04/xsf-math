@@ -1,6 +1,7 @@
 #pragma once
 
-// 交战与杀伤业务域入口。
+// 交战与杀伤业务域入口 (Engagement and lethality domain header)
+// Guidance laws, seeker models, fuze, fragmentation, and kill probability
 
 #include "../guidance/proportional_nav.hpp"
 #include "../guidance/guidance_decoupling.hpp"

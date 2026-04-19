@@ -6,29 +6,34 @@
 
 namespace xsf_math {
 
+// 武器-目标分配目标（Weapon-Target Assignment target）
 struct wta_target {
-    int target_id = -1;
-    double priority = 1.0;
+    int target_id = -1;  // 目标 ID（Target ID）
+    double priority = 1.0;  // 优先级（Priority）
 };
 
+// 武器-目标分配武器（Weapon-Target Assignment weapon）
 struct wta_weapon {
-    int weapon_id = -1;
-    bool available = true;
+    int weapon_id = -1;  // 武器 ID（Weapon ID）
+    bool available = true;  // 是否可用（Available）
 };
 
+// 武器-目标分配结果项（Weapon-Target Assignment entry）
 struct wta_assignment {
     int weapon_id = -1;
     int target_id = -1;
-    double score = 0.0;
+    double score = 0.0;  // 分配得分（Assignment score）
 };
 
+// 武器-目标分配结果（Weapon-Target Assignment result）
 struct weapon_assignment_result {
-    std::vector<wta_assignment> assignments;
-    double total_score = 0.0;
+    std::vector<wta_assignment> assignments;  // 分配列表（Assignment list）
+    double total_score = 0.0;  // 总得分（Total score）
 };
 
+// 武器-目标分配控制器（Weapon-Target Assignment controller）
 struct weapon_assignment_controller {
-    // pk_matrix[w][t] 给出武器 w 对目标 t 的成功概率。
+    // pk_matrix[w][t] 给出武器 w 对目标 t 的成功概率。（pk_matrix[w][t] gives kill probability of weapon w against target t.）
     weapon_assignment_result assign(const std::vector<wta_weapon>& weapons,
                                     const std::vector<wta_target>& targets,
                                     const std::vector<std::vector<double>>& pk_matrix) const {

@@ -8,7 +8,7 @@
 
 namespace xsf_math {
 
-// 电子战行为层：EW 技术库与选通控制器。
+// 电子战行为层：EW 技术库与选通控制器（Electronic warfare behavior layer: EW technique library and gating controller）。
 //
 // 参考 xsf-core XsfEW_EA 的模式：
 // - 技术库按 technique_id 注册；
@@ -16,31 +16,41 @@ namespace xsf_math {
 // - 控制器维护“当前已选通技术”集合；
 // - 给定目标系统功能时，返回当前生效的降级乘子。
 // 本模块不发射干扰，也不改变 EM 信道；它只聚合“这次应该用哪几种技术”。
+// Reference xsf-core XsfEW_EA pattern:
+// - Technique library registered by technique_id;
+// - Each technique declares target system function and mitigation class;
+// - Controller maintains currently selected technique set;
+// - Returns effective degradation multiplier for given target system function.
+// This module does not transmit jamming or change EM channels; it only aggregates which techniques to use.
 
+// EW 目标系统功能（EW target system function）
 enum class ew_system_function {
-    unknown,
-    search,
-    track,
-    guidance,
-    communication
+    unknown,     // 未知（Unknown）
+    search,      // 搜索（Search）
+    track,       // 跟踪（Track）
+    guidance,    // 引导（Guidance）
+    communication // 通信（Communication）
 };
 
+// EW 技术条目（EW technique entry）
 struct ew_technique {
-    std::string         technique_id;
-    std::string         mitigation_class_id;     // 对方 EP 通过该 ID 匹配反制
-    std::string         mutex_group_id;          // 同组技术互斥
-    ew_system_function  target_function = ew_system_function::unknown;
-    ew_degradation      effect{};                 // 作用于基线 SNR 的乘子
-    double              resource_cost = 1.0;
-    double              min_hold_time_s = 0.0;
+    std::string         technique_id;  // 技术标识（Technique ID）
+    std::string         mitigation_class_id;     // 对方 EP 通过该 ID 匹配反制（Opponent EP matches countermeasure by this ID）
+    std::string         mutex_group_id;          // 同组技术互斥（Mutex group ID, techniques in same group are mutually exclusive）
+    ew_system_function  target_function = ew_system_function::unknown;  // 目标功能（Target function）
+    ew_degradation      effect{};                 // 作用于基线 SNR 的乘子（Degradation effect multiplier on baseline SNR）
+    double              resource_cost = 1.0;  // 资源消耗（Resource cost）
+    double              min_hold_time_s = 0.0;  // 最小保持时间秒（Minimum hold time in seconds）
 };
 
+// EW 技术控制器（EW technique controller）
 struct ew_technique_controller {
-    std::unordered_map<std::string, ew_technique> library;
-    std::vector<std::string> selected_ids;
-    double max_resource_budget = 4.0;
-    std::unordered_map<std::string, double> selection_time_s;
+    std::unordered_map<std::string, ew_technique> library;  // 技术库（Technique library）
+    std::vector<std::string> selected_ids;  // 已选技术 ID 列表（Selected technique IDs）
+    double max_resource_budget = 4.0;  // 最大资源预算（Maximum resource budget）
+    std::unordered_map<std::string, double> selection_time_s;  // 各技术的选中时间秒（Selection time per technique in seconds）
 
+    // 添加技术到库（Add technique to library）
     bool add_technique(ew_technique t) {
         auto [it, inserted] = library.emplace(t.technique_id, std::move(t));
         if (!inserted) {
@@ -49,6 +59,7 @@ struct ew_technique_controller {
         return inserted;
     }
 
+    // 当前资源消耗（Current resource cost）
     double current_resource_cost() const {
         double total = 0.0;
         for (const auto& id : selected_ids) {
@@ -58,6 +69,7 @@ struct ew_technique_controller {
         return total;
     }
 
+    // 选通技术（Select technique）
     bool select(const std::string& id, ew_system_function fn, double sim_time_s = 0.0) {
         auto it = library.find(id);
         if (it == library.end()) {
@@ -86,6 +98,7 @@ struct ew_technique_controller {
         return true;
     }
 
+    // 取消选通技术（Deselect technique）
     void deselect(const std::string& id, double sim_time_s = 0.0) {
         for (auto it = selected_ids.begin(); it != selected_ids.end(); ++it) {
             if (*it != id) continue;
@@ -101,6 +114,7 @@ struct ew_technique_controller {
     }
 
     // 合成当前生效的等效降级：乘子相乘、blanking_factor 取最小。
+    // 合成当前生效的等效降级（Compute combined effective degradation: multiply gains, take minimum blanking factor）
     ew_degradation combined_effect_for(ew_system_function fn) const {
         ew_degradation out{};
         for (const auto& id : selected_ids) {
@@ -116,6 +130,7 @@ struct ew_technique_controller {
         return out;
     }
 
+    // 活跃技术数量（Active technique count）
     std::size_t active_count() const { return selected_ids.size(); }
 };
 

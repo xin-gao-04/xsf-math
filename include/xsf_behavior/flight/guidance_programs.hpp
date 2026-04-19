@@ -11,64 +11,71 @@
 
 namespace xsf_math {
 
-// 程序级制导逻辑集合。
+// 程序级制导逻辑集合 (Collection of program-level guidance logic).
 
+// 制导程序状态 (Guidance program status).
 enum class guidance_program_status {
-    continue_running,
-    complete
+    continue_running,  // 继续运行 (continue running)
+    complete           // 已完成 (complete)
 };
 
+// 比例导引方法 (Proportional navigation method).
 enum class guidance_pn_method {
-    pure,
-    augmented
+    pure,       // 纯比例导引 (pure PN)
+    augmented   // 增广比例导引 (augmented PN)
 };
 
+// 制导程序输出命令 (Guidance program output commands).
 struct guidance_program_commands {
-    vec3 accel_cmd_ecs{};           // ECS 加速度命令
-    vec3 angle_rate_cmd_rad_s{};    // 姿态角速率命令，顺序为 roll/pitch/yaw
-    bool saturated = false;         // 是否被相位限制裁剪
+    vec3 accel_cmd_ecs{};           // ECS 加速度命令 (acceleration command in Entity Coordinate System, ECS)
+    vec3 angle_rate_cmd_rad_s{};    // 姿态角速率命令 (attitude angle rate command)，顺序为 roll/pitch/yaw (order: roll/pitch/yaw)
+    bool saturated = false;         // 是否被相位限制裁剪 (whether clipped by phase/rate limits)
 };
 
+// 制导程序结果 (Guidance program result).
 struct guidance_program_result {
-    guidance_program_commands commands{};
-    guidance_program_status status = guidance_program_status::continue_running;
+    guidance_program_commands commands{};                          // 输出命令 (output commands)
+    guidance_program_status status = guidance_program_status::continue_running;  // 当前状态 (current status)
 };
 
+// 制导阶段选项 (Guidance phase options).
 struct guidance_phase_options {
-    double cos_los_offset = 0.866;
-    double pn_gain = 3.0;
-    double vp_gain = 10.0;
-    double gee_bias = 1.0;
-    double lateral_gee_bias = 0.0;
-    double max_gee_cmd_mps2 = 25.0 * constants::gravity_mps2;
-    double max_pitch_angle_rad = 70.0 * constants::deg_to_rad;
-    double max_ascent_rate_mps = 0.0;
-    double max_descent_rate_mps = 0.0;
-    double time_constant_s = 0.0;
-    guidance_pn_method pn_method = guidance_pn_method::pure;
-    std::optional<double> commanded_altitude_m;
-    bool commanded_altitude_is_agl = false;
-    std::optional<double> commanded_flight_path_angle_rad;
-    std::optional<double> commanded_azimuth_offset_rad;
+    double cos_los_offset = 0.866;                                           // 视线偏置余弦阈值 (cosine line-of-sight offset threshold)
+    double pn_gain = 3.0;                                                    // 比例导引增益 (proportional navigation gain, N')
+    double vp_gain = 10.0;                                                   // 追踪导增益 (velocity pursuit gain)
+    double gee_bias = 1.0;                                                   // 重力偏置 (gravity bias)
+    double lateral_gee_bias = 0.0;                                           // 横向重力偏置 (lateral gravity bias)
+    double max_gee_cmd_mps2 = 25.0 * constants::gravity_mps2;                // 最大指令加速度 (maximum commanded acceleration)
+    double max_pitch_angle_rad = 70.0 * constants::deg_to_rad;               // 最大俯仰角 (maximum pitch angle)
+    double max_ascent_rate_mps = 0.0;                                        // 最大上升率 (maximum ascent rate)，0 表示不限制
+    double max_descent_rate_mps = 0.0;                                       // 最大下降率 (maximum descent rate)，0 表示不限制
+    double time_constant_s = 0.0;                                            // 时间常数 (time constant)，用于指令滤波
+    guidance_pn_method pn_method = guidance_pn_method::pure;                 // PN 方法 (PN method)
+    std::optional<double> commanded_altitude_m;                              // 指令高度 (commanded altitude)
+    bool commanded_altitude_is_agl = false;                                  // 指令高度是否为离地高 (whether commanded altitude is Above Ground Level)
+    std::optional<double> commanded_flight_path_angle_rad;                   // 指令航迹倾角 (commanded flight path angle)
+    std::optional<double> commanded_azimuth_offset_rad;                      // 指令方位偏置 (commanded azimuth offset)
 };
 
+// 制导程序状态上下文 (Guidance program state context).
 struct guidance_program_state {
-    flight_kinematic_state vehicle{};
-    euler_angles commanded_attitude{}; // 当前命令姿态
-    bool commanded_attitude_valid = false;
-    double sim_time_s = 0.0;
-    double current_time_s = 0.0;
-    double end_time_s = 0.0;
-    double last_update_time_s = 0.0;
+    flight_kinematic_state vehicle{};                   // 本机运动状态 (vehicle kinematic state)
+    euler_angles commanded_attitude{};                  // 当前命令姿态 (current commanded attitude)
+    bool commanded_attitude_valid = false;              // 命令姿态是否有效 (whether commanded attitude is valid)
+    double sim_time_s = 0.0;                            // 仿真时间 (simulation time)
+    double current_time_s = 0.0;                        // 当前阶段开始时间 (current phase start time)
+    double end_time_s = 0.0;                            // 当前阶段结束时间 (current phase end time)
+    double last_update_time_s = 0.0;                    // 上次更新时间 (last update time)
 
-    bool aimpoint_is_valid = false;
-    vec3 aimpoint_position_wcs{};
-    vec3 target_velocity_wcs{};
-    vec3 target_acceleration_wcs{};
+    bool aimpoint_is_valid = false;                     // 瞄准点是否有效 (whether aimpoint is valid)
+    vec3 aimpoint_position_wcs{};                       // 瞄准点位置 (aimpoint position in WCS)
+    vec3 target_velocity_wcs{};                         // 目标速度 (target velocity in WCS)
+    vec3 target_acceleration_wcs{};                     // 目标加速度 (target acceleration in WCS)
 
-    bool terrain_enabled = false;
-    double terrain_height_m = 0.0;
+    bool terrain_enabled = false;                       // 是否启用地形 (whether terrain is enabled)
+    double terrain_height_m = 0.0;                      // 地形高度 (terrain height)
 
+    // 构建交战几何 (Build engagement geometry).
     engagement_geometry engagement() const {
         engagement_geometry geom;
         geom.weapon_pos = vehicle.position_wcs;
@@ -79,46 +86,55 @@ struct guidance_program_state {
         return geom;
     }
 
+    // 瞄准点相对位置 (Aimpoint relative location in WCS).
     vec3 aim_rel_loc_wcs() const {
         return aimpoint_position_wcs - vehicle.position_wcs;
     }
 
+    // 当前姿态角 (Current attitude angles).
     euler_angles attitude() const {
         return {vehicle.heading_rad, vehicle.pitch_rad, vehicle.roll_rad};
     }
 
+    // 当前指令姿态 (Current commanded attitude).
     euler_angles current_commanded_attitude() const {
         if (commanded_attitude_valid) return commanded_attitude;
         return attitude();
     }
 
+    // 瞄准点单位向量在 ECS 中的表达 (Aimpoint unit vector in ECS).
     vec3 aim_unit_vec_ecs() const {
         return wcs_to_ecs(aim_rel_loc_wcs().normalized(), attitude());
     }
 
+    // 本步长时间 (Step duration).
     double step_dt_s() const {
         return end_time_s - current_time_s;
     }
 
+    // 更新间隔 (Update interval).
     double update_dt_s() const {
         return current_time_s - last_update_time_s;
     }
 };
 
+// 姿态轴目标 (Attitude axis target).
 struct attitude_axis_target {
-    std::optional<double> angle_rad;
-    std::optional<double> rate_rad_s;
-    bool body_angle = true;
+    std::optional<double> angle_rad;    // 目标角度 (target angle)
+    std::optional<double> rate_rad_s;   // 目标角速率 (target angular rate)
+    bool body_angle = true;             // 是否为体轴角 (whether angle is in body axes)
 };
 
 namespace detail {
 
+// 根据参考值符号返回带幅度的符号值 (Return signed magnitude based on reference sign).
 inline double sign_of(double magnitude, double reference) {
     if (reference > 0.0) return magnitude;
     if (reference < 0.0) return -magnitude;
     return 0.0;
 }
 
+// 归一化轴角度 (Normalize axis angle).
 inline double normalize_axis_angle(int axis, double angle_rad) {
     if (axis == 1) {
         return std::clamp(angle_rad, -constants::half_pi, constants::half_pi);
@@ -126,10 +142,12 @@ inline double normalize_axis_angle(int axis, double angle_rad) {
     return normalize_angle_pm_pi(angle_rad);
 }
 
+// 限制程序加速度 (Clamp program acceleration).
 inline double clamp_program_accel(double accel_mps2, const guidance_phase_options& phase, bool& saturated) {
     return clamp_with_flag(accel_mps2, -phase.max_gee_cmd_mps2, phase.max_gee_cmd_mps2, saturated);
 }
 
+// 限制程序加速度在平面内 (Limit program acceleration in the lateral/vertical plane).
 inline void limit_program_accel(guidance_program_commands& commands, const guidance_phase_options& phase) {
     commands.accel_cmd_ecs.y = clamp_with_flag(commands.accel_cmd_ecs.y,
                                                -phase.max_gee_cmd_mps2,
@@ -141,20 +159,23 @@ inline void limit_program_accel(guidance_program_commands& commands, const guida
                                                commands.saturated);
 }
 
+// 应用重力偏置补偿 (Apply gravity bias compensation).
 inline void apply_gravity_bias(const guidance_program_state& state,
                                double gravity_bias_factor,
                                guidance_program_commands& commands) {
     if (gravity_bias_factor == 0.0) return;
-    const vec3 gravity_wcs{0.0, 0.0, constants::gravity_mps2};
+    const vec3 gravity_wcs{0.0, 0.0, constants::gravity_mps2};  // WCS 重力向量 (gravity vector in WCS)，Z 向下
     const vec3 gravity_ecs = wcs_to_ecs(gravity_wcs, state.attitude());
     commands.accel_cmd_ecs += (-gravity_bias_factor) * gravity_ecs;
 }
 
+// 应用横向偏置 (Apply lateral bias).
 inline void apply_lateral_bias(double lateral_bias_factor, guidance_program_commands& commands) {
     if (lateral_bias_factor == 0.0) return;
     commands.accel_cmd_ecs.y += lateral_bias_factor * constants::gravity_mps2;
 }
 
+// 高度制导 (Altitude guidance).
 inline void altitude_guidance(const guidance_program_state& state,
                               const guidance_phase_options& phase,
                               guidance_program_commands& commands,
@@ -164,7 +185,7 @@ inline void altitude_guidance(const guidance_program_state& state,
 
     double effective_commanded_altitude_m = commanded_altitude_m;
     if (phase.commanded_altitude_is_agl && state.terrain_enabled) {
-        effective_commanded_altitude_m += state.terrain_height_m;
+        effective_commanded_altitude_m += state.terrain_height_m;  // AGL 转海拔 (convert AGL to altitude above datum)
     }
 
     const double cur_alt = state.vehicle.altitude_m;
@@ -211,6 +232,7 @@ inline void altitude_guidance(const guidance_program_state& state,
     commands.accel_cmd_ecs.z = -normal_accel;
 }
 
+// 判断航迹倾角是否已达到目标值 (Check whether flight path angle has been achieved).
 inline bool flight_path_angle_achieved(double current_fpa_rad,
                                        double last_fpa_rad,
                                        double commanded_fpa_rad) {
@@ -220,6 +242,7 @@ inline bool flight_path_angle_achieved(double current_fpa_rad,
            ((current_fpa_rad >= commanded_fpa_rad) && (last_fpa_rad <= commanded_fpa_rad));
 }
 
+// 航迹倾角制导 (Flight path angle guidance).
 inline void flight_path_angle_guidance(const guidance_program_state& state,
                                        const guidance_phase_options& phase,
                                        double commanded_fpa_rad,
@@ -248,6 +271,7 @@ inline void flight_path_angle_guidance(const guidance_program_state& state,
     commands.accel_cmd_ecs.z = compensated.z;
 }
 
+// 比例导引制导 (Proportional navigation guidance).
 inline void pro_nav_guidance(const guidance_program_state& state,
                              double pro_nav_gain,
                              bool augmented,
@@ -271,6 +295,7 @@ inline void pro_nav_guidance(const guidance_program_state& state,
     commands.accel_cmd_ecs.z = accel_ecs.z;
 }
 
+// 追踪制导 (Pursuit guidance).
 inline void pursuit_guidance(const guidance_program_state& state,
                              double pursuit_gain,
                              guidance_program_commands& commands) {
@@ -281,7 +306,7 @@ inline void pursuit_guidance(const guidance_program_state& state,
         return;
     }
 
-    const vec3 weapon_unit_vel_ecs{1.0, 0.0, 0.0};
+    const vec3 weapon_unit_vel_ecs{1.0, 0.0, 0.0};  // 弹体纵轴单位向量 (weapon longitudinal axis unit vector in ECS)
     const vec3 aim_unit_ecs = state.aim_unit_vec_ecs();
     const vec3 z_axis_ecs = weapon_unit_vel_ecs.cross(aim_unit_ecs);
     const vec3 pursuit_vec_ecs = z_axis_ecs.cross(weapon_unit_vel_ecs);
@@ -297,6 +322,7 @@ inline void pursuit_guidance(const guidance_program_state& state,
     commands.accel_cmd_ecs.z = pursuit_mag * pursuit_gain * constants::gravity_mps2 * unit.z;
 }
 
+// 方位偏置制导 (Azimuth offset guidance).
 inline void angle_offset_guidance(const guidance_program_state& state,
                                   const guidance_phase_options& phase,
                                   guidance_program_commands& commands) {
@@ -325,8 +351,10 @@ inline void angle_offset_guidance(const guidance_program_state& state,
 
 } // namespace detail
 
+// 传统制导程序 (Legacy guidance program).
 class legacy_guidance_program {
 public:
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state,
                                     const guidance_phase_options& phase) {
         guidance_program_result result;
@@ -395,15 +423,17 @@ public:
     }
 
 private:
-    double last_y_accel_mps2_ = 0.0;
-    double last_z_accel_mps2_ = 0.0;
+    double last_y_accel_mps2_ = 0.0;  // 上一步 Y 方向加速度 (previous step Y-axis acceleration)
+    double last_z_accel_mps2_ = 0.0;  // 上一步 Z 方向加速度 (previous step Z-axis acceleration)
 };
 
+// 高度制导程序 (Altitude guidance program).
 class altitude_guidance_program {
 public:
-    std::optional<double> commanded_altitude_m;
-    bool commanded_altitude_is_agl = false;
+    std::optional<double> commanded_altitude_m;       // 指令高度 (commanded altitude)
+    bool commanded_altitude_is_agl = false;           // 是否为离地高 (whether altitude is AGL)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state,
                                     guidance_phase_options phase) const {
         guidance_program_result result;
@@ -424,13 +454,15 @@ public:
     }
 };
 
+// 拦截制导程序 (Intercept guidance program).
 class intercept_guidance_program {
 public:
-    std::optional<double> pro_nav_gain;
-    std::optional<double> cos_switch_angle;
-    std::optional<double> pursuit_nav_gain;
-    std::optional<guidance_pn_method> pn_method;
+    std::optional<double> pro_nav_gain;               // 比例导引增益 (proportional navigation gain)
+    std::optional<double> cos_switch_angle;           // 视线切换角余弦 (cosine of switch angle)
+    std::optional<double> pursuit_nav_gain;           // 追踪导增益 (pursuit navigation gain)
+    std::optional<guidance_pn_method> pn_method;      // PN 方法 (PN method)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state,
                                     const guidance_phase_options& phase) const {
         guidance_program_result result;
@@ -467,10 +499,12 @@ public:
     }
 };
 
+// 传统航迹倾角制导程序 (Legacy flight path angle guidance program).
 class legacy_flight_path_angle_program {
 public:
-    std::optional<double> commanded_flight_path_angle_rad;
+    std::optional<double> commanded_flight_path_angle_rad;  // 指令航迹倾角 (commanded flight path angle)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state,
                                     const guidance_phase_options& phase) {
         guidance_program_result result;
@@ -500,13 +534,15 @@ public:
     }
 
 private:
-    double last_flight_path_angle_rad_ = 0.0;
+    double last_flight_path_angle_rad_ = 0.0;  // 上一步航迹倾角 (previous flight path angle)
 };
 
+// 重力偏置程序 (Gravity bias program).
 class gravity_bias_program {
 public:
-    std::optional<double> gravity_bias_factor;
+    std::optional<double> gravity_bias_factor;  // 重力偏置系数 (gravity bias factor)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state,
                                     const guidance_phase_options& phase) const {
         guidance_program_result result;
@@ -520,23 +556,27 @@ public:
     }
 };
 
+// 重力转弯程序 (Gravity turn program).
 class gravity_turn_program {
 public:
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state&,
                                     const guidance_phase_options&) const {
         guidance_program_result result;
-        result.commands.accel_cmd_ecs.z = 0.0;
+        result.commands.accel_cmd_ecs.z = 0.0;  // 零法向加速度实现重力转弯 (zero normal acceleration for gravity turn)
         return result;
     }
 };
 
+// 姿态制导程序 (Attitude guidance program).
 class attitude_guidance_program {
 public:
-    attitude_axis_target yaw{};
-    attitude_axis_target pitch{};
-    attitude_axis_target roll{};
-    double default_angle_rate_rad_s = 10.0 * constants::deg_to_rad;
+    attitude_axis_target yaw{};                          // 偏航轴目标 (yaw axis target)
+    attitude_axis_target pitch{};                        // 俯仰轴目标 (pitch axis target)
+    attitude_axis_target roll{};                         // 滚转轴目标 (roll axis target)
+    double default_angle_rate_rad_s = 10.0 * constants::deg_to_rad;  // 默认角速率 (default angular rate)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state) const {
         guidance_program_result result;
         const double dt_s = state.step_dt_s();
@@ -592,12 +632,14 @@ public:
     }
 };
 
+// 航迹倾角制导程序 (Flight path angle guidance program).
 class flight_path_angle_guidance_program {
 public:
-    std::optional<double> commanded_flight_path_angle_rad;
-    double pitch_rate_rad_s = 0.15 * constants::deg_to_rad;
-    double time_constant_s = 1.0;
+    std::optional<double> commanded_flight_path_angle_rad;  // 指令航迹倾角 (commanded flight path angle)
+    double pitch_rate_rad_s = 0.15 * constants::deg_to_rad; // 俯仰速率 (pitch rate)
+    double time_constant_s = 1.0;                           // 时间常数 (time constant)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state,
                                     const guidance_phase_options& phase) {
         guidance_program_result result;
@@ -628,7 +670,7 @@ public:
 
         const vec3 own_loc = state.vehicle.position_wcs;
         const double radius_sq = std::max(own_loc.magnitude_sq(), 1.0);
-        const double gravity_mps2 = mu_earth / radius_sq;
+        const double gravity_mps2 = mu_earth / radius_sq;  // 当地重力加速度 (local gravitational acceleration)
         const double grav_accel_z = gravity_mps2 * std::cos(state.vehicle.flight_path_rad);
         const double speed = std::max(state.vehicle.true_airspeed_mps, 1.0);
 
@@ -740,24 +782,26 @@ public:
     }
 
 private:
-    double start_time_s_ = 0.0;
-    double start_flight_path_angle_rad_ = 0.0;
-    double last_flight_path_angle_rad_ = 0.0;
-    double switch_time_s_ = -1.0;
-    double switch_flight_path_angle_rad_ = 0.0;
-    double switch_lateral_acceleration_mps2_ = 0.0;
-    bool first_execute_call_ = true;
-    bool pitch_down_program_ = true;
+    double start_time_s_ = 0.0;                          // 开始时间 (start time)
+    double start_flight_path_angle_rad_ = 0.0;           // 起始航迹倾角 (initial flight path angle)
+    double last_flight_path_angle_rad_ = 0.0;            // 上一步航迹倾角 (previous flight path angle)
+    double switch_time_s_ = -1.0;                        // 切换时间 (switch time)
+    double switch_flight_path_angle_rad_ = 0.0;          // 切换时航迹倾角 (flight path angle at switch)
+    double switch_lateral_acceleration_mps2_ = 0.0;      // 切换时横向加速度 (lateral acceleration at switch)
+    bool first_execute_call_ = true;                     // 是否为首次调用 (whether this is the first call)
+    bool pitch_down_program_ = true;                     // 是否为俯冲程序 (whether this is a pitch-down program)
 };
 
+// 轨道入轨程序 (Orbit insertion program).
 class orbit_insertion_program {
 public:
-    double ascent_gravity_bias = 0.0;
-    double maximum_lateral_acceleration_mps2 = 0.1 * constants::gravity_mps2;
-    double minimum_insertion_altitude_m = 100000.0;
-    double coarse_adjustment_threshold_rad = 0.5 * constants::deg_to_rad;
-    double fine_adjustment_threshold_rad = 0.05 * constants::deg_to_rad;
+    double ascent_gravity_bias = 0.0;                              // 上升段重力偏置 (ascent gravity bias)
+    double maximum_lateral_acceleration_mps2 = 0.1 * constants::gravity_mps2;  // 最大横向加速度 (maximum lateral acceleration)
+    double minimum_insertion_altitude_m = 100000.0;                // 最低入轨高度 (minimum insertion altitude)
+    double coarse_adjustment_threshold_rad = 0.5 * constants::deg_to_rad;      // 粗调阈值 (coarse adjustment threshold)
+    double fine_adjustment_threshold_rad = 0.05 * constants::deg_to_rad;       // 精调阈值 (fine adjustment threshold)
 
+    // 计算制导结果 (Compute guidance result).
     guidance_program_result compute(const guidance_program_state& state) {
         guidance_program_result result;
         if (orbit_declared_) {
@@ -774,13 +818,13 @@ public:
         const vec3 loc = state.vehicle.position_wcs;
         const double speed = vel.magnitude();
         const double radius = std::max(loc.magnitude(), 1.0);
-        const double gravity_mps2 = mu_earth / (radius * radius);
-        const double centripetal_accel_mps2 = (speed * speed) / radius;
+        const double gravity_mps2 = mu_earth / (radius * radius);  // 当地重力加速度 (local gravity)
+        const double centripetal_accel_mps2 = (speed * speed) / radius;  // 向心加速度 (centripetal acceleration)
 
         const double cos_loc_vel = std::clamp(loc.dot(vel) / (radius * std::max(speed, 1.0e-9)), -1.0, 1.0);
-        const double flight_path_angle_rad = constants::half_pi - std::acos(cos_loc_vel);
-        const double orbital_speed = std::sqrt(mu_earth / radius);
-        const double speed_fraction = speed / orbital_speed;
+        const double flight_path_angle_rad = constants::half_pi - std::acos(cos_loc_vel);  // 航迹倾角 (flight path angle)
+        const double orbital_speed = std::sqrt(mu_earth / radius);  // 圆轨道速度 (circular orbital speed)
+        const double speed_fraction = speed / orbital_speed;        // 速度比 (speed fraction relative to circular)
 
         bool orbit_now_declared = false;
         double gravity_bias = 0.0;
@@ -846,8 +890,8 @@ public:
     }
 
 private:
-    bool fine_adjustment_active_ = false;
-    bool orbit_declared_ = false;
+    bool fine_adjustment_active_ = false;  // 精调是否激活 (whether fine adjustment is active)
+    bool orbit_declared_ = false;          // 是否已声明入轨 (whether orbit has been declared)
 };
 
 } // namespace xsf_math

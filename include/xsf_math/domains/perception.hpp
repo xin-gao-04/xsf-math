@@ -1,6 +1,7 @@
 #pragma once
 
-// 感知与探测业务域入口。
+// 感知与探测业务域入口 (Perception and detection domain header)
+// Includes radar, infrared, ESM/ELINT, sonar, and propagation models
 
 #include "../core/rcs.hpp"
 #include "../rcs/simple_geometries.hpp"

@@ -6,18 +6,22 @@
 
 namespace xsf_math {
 
+// 检测样本（Detection sample）
 struct detection_sample {
-    detection measurement{};
-    double sim_time_s = 0.0;
+    detection measurement{};  // 量测（Measurement）
+    double sim_time_s = 0.0;  // 仿真时间秒（Simulation time in seconds）
 };
 
+// 航迹种子（Track seed）
 struct track_seed {
-    detection first_detection{};
-    vec3 initial_velocity{};
-    bool valid = false;
+    detection first_detection{};  // 首次检测（First detection）
+    vec3 initial_velocity{};  // 初始速度（Initial velocity）
+    bool valid = false;  // 是否有效（Valid）
 };
 
+// 航迹起始器（Track initiator）
 struct track_initiator {
+    // 由两点生成航迹种子（Generate track seed from two points）
     track_seed seed_from_two_points(const detection_sample& a, const detection_sample& b) const {
         track_seed seed;
         double dt = b.sim_time_s - a.sim_time_s;
@@ -28,6 +32,7 @@ struct track_initiator {
         return seed;
     }
 
+    // 由三点生成航迹种子（Generate track seed from three points）
     track_seed seed_from_three_points(const detection_sample& a,
                                       const detection_sample& b,
                                       const detection_sample& c) const {
@@ -43,6 +48,7 @@ struct track_initiator {
         return seed;
     }
 
+    // 在管理器中起始航迹（Start track in manager）
     int start_track(track_manager& manager, const track_seed& seed, double sim_time_s) const {
         if (!seed.valid) return -1;
         return manager.start_tentative_track(seed.first_detection, sim_time_s, seed.initial_velocity);

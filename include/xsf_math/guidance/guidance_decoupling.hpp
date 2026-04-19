@@ -8,15 +8,17 @@
 
 namespace xsf_math {
 
+// 制导通道指令（Guidance Channel Command）
 struct guidance_channel_command {
-    double normal_accel_mps2 = 0.0;    // 俯仰法向
-    double lateral_accel_mps2 = 0.0;   // 偏航侧向
-    double normal_load_g = 0.0;
-    double lateral_load_g = 0.0;
-    double pitch_cmd_rad = 0.0;
-    double yaw_cmd_rad = 0.0;
+    double normal_accel_mps2 = 0.0;    // 俯仰法向（Pitch Normal Acceleration）
+    double lateral_accel_mps2 = 0.0;   // 偏航侧向（Yaw Lateral Acceleration）
+    double normal_load_g = 0.0;  // 法向过载，单位 g（Normal Load in g）
+    double lateral_load_g = 0.0;  // 侧向过载，单位 g（Lateral Load in g）
+    double pitch_cmd_rad = 0.0;  // 俯仰指令角，单位弧度（Pitch Command Angle in Radians）
+    double yaw_cmd_rad = 0.0;  // 偏航指令角，单位弧度（Yaw Command Angle in Radians）
 };
 
+// 将世界坐标系制导加速度分解到通道指令（Decompose Guidance Acceleration from WCS to Channel Commands）
 inline guidance_channel_command decompose_guidance_accel(const vec3& accel_wcs,
                                                          const euler_angles& attitude,
                                                          double speed_mps,
@@ -35,6 +37,7 @@ inline guidance_channel_command decompose_guidance_accel(const vec3& accel_wcs,
     return cmd;
 }
 
+// 将通道指令加速度转换回世界坐标系（Convert Channel Command Acceleration back to WCS）
 inline vec3 guidance_channels_to_accel_wcs(const guidance_channel_command& cmd,
                                            const euler_angles& attitude) {
     vec3 accel_ecs{0.0, cmd.lateral_accel_mps2, -cmd.normal_accel_mps2};

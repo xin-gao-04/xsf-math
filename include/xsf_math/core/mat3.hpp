@@ -5,21 +5,26 @@
 
 namespace xsf_math {
 
+/** 3x3 矩阵，按行主序存储 (3x3 matrix stored row-major) */
 // 3x3 matrix stored row-major: m[row][col]
 struct mat3 {
-    double m[3][3] = {};
+    double m[3][3] = {}; ///< 矩阵元素，m[row][col] (matrix elements)
 
+    /** 默认构造函数 (Default constructor) */
     constexpr mat3() = default;
 
+    /** 返回单位矩阵 (Returns identity matrix) */
     static constexpr mat3 identity() {
         mat3 r;
         r.m[0][0] = r.m[1][1] = r.m[2][2] = 1.0;
         return r;
     }
 
+    /** 返回零矩阵 (Returns zero matrix) */
     static constexpr mat3 zero() { return mat3{}; }
 
     // Construct from rows
+    /** 由三个行向量构造 (Construct from three row vectors) */
     static constexpr mat3 from_rows(const vec3& r0, const vec3& r1, const vec3& r2) {
         mat3 r;
         r.m[0][0]=r0.x; r.m[0][1]=r0.y; r.m[0][2]=r0.z;
@@ -28,6 +33,7 @@ struct mat3 {
         return r;
     }
 
+    /** 矩阵与向量相乘 (Matrix-vector multiplication) */
     constexpr vec3 operator*(const vec3& v) const {
         return {
             m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z,
@@ -36,6 +42,7 @@ struct mat3 {
         };
     }
 
+    /** 矩阵与矩阵相乘 (Matrix-matrix multiplication) */
     constexpr mat3 operator*(const mat3& b) const {
         mat3 r;
         for (int i = 0; i < 3; ++i)
@@ -44,6 +51,7 @@ struct mat3 {
         return r;
     }
 
+    /** 转置矩阵 (Transposed matrix) */
     constexpr mat3 transposed() const {
         mat3 r;
         for (int i = 0; i < 3; ++i)
@@ -52,6 +60,7 @@ struct mat3 {
         return r;
     }
 
+    /** 行列式 (Determinant) */
     constexpr double determinant() const {
         return m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1])
              - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0])

@@ -10,23 +10,27 @@ namespace xsf_math {
 
 struct euler_angles;
 
-// 轻量四元数：q = w + xi + yj + zk
+/** 轻量四元数：q = w + xi + yj + zk (Lightweight quaternion: q = w + xi + yj + zk) */
 struct quaternion {
-    double w = 1.0;
-    double x = 0.0;
-    double y = 0.0;
-    double z = 0.0;
+    double w = 1.0; ///< 实部/标量分量 (real/scalar component)
+    double x = 0.0; ///< i 分量 (i component)
+    double y = 0.0; ///< j 分量 (j component)
+    double z = 0.0; ///< k 分量 (k component)
 
+    /** 模长 (Magnitude) */
     double magnitude() const { return std::sqrt(w * w + x * x + y * y + z * z); }
 
+    /** 归一化：返回单位四元数；若模长过小则返回单位四元数 (Normalized: returns unit quaternion; returns identity if magnitude is too small) */
     quaternion normalized() const {
         double mag = magnitude();
         if (mag < 1e-20) return {};
         return {w / mag, x / mag, y / mag, z / mag};
     }
 
+    /** 共轭四元数 (Conjugate quaternion) */
     quaternion conjugate() const { return {w, -x, -y, -z}; }
 
+    /** 逆四元数 (Inverse quaternion) */
     quaternion inverse() const {
         double n2 = w * w + x * x + y * y + z * z;
         if (n2 < 1e-20) return {};
@@ -34,6 +38,7 @@ struct quaternion {
         return {c.w / n2, c.x / n2, c.y / n2, c.z / n2};
     }
 
+    /** 四元数乘法（Hamilton 积） (Quaternion multiplication (Hamilton product)) */
     quaternion operator*(const quaternion& b) const {
         return {
             w * b.w - x * b.x - y * b.y - z * b.z,
@@ -43,16 +48,23 @@ struct quaternion {
         };
     }
 
+    /** 数乘 (Scalar multiplication) */
     quaternion operator*(double s) const { return {w * s, x * s, y * s, z * s}; }
+
+    /** 四元数加法 (Quaternion addition) */
     quaternion operator+(const quaternion& b) const { return {w + b.w, x + b.x, y + b.y, z + b.z}; }
+
+    /** 四元数减法 (Quaternion subtraction) */
     quaternion operator-(const quaternion& b) const { return {w - b.w, x - b.x, y - b.y, z - b.z}; }
 
+    /** 用该四元数旋转三维向量（自动归一化） (Rotate 3D vector by this quaternion, auto-normalizes) */
     vec3 rotate(const vec3& v) const {
         quaternion qv{0.0, v.x, v.y, v.z};
         quaternion qr = (*this).normalized() * qv * this->normalized().conjugate();
         return {qr.x, qr.y, qr.z};
     }
 
+    /** 由旋转轴和旋转角构造四元数 (Construct quaternion from axis and angle) */
     static quaternion from_axis_angle(const vec3& axis, double angle_rad) {
         vec3 unit = axis.normalized();
         double half = 0.5 * angle_rad;
@@ -60,6 +72,7 @@ struct quaternion {
         return {std::cos(half), unit.x * s, unit.y * s, unit.z * s};
     }
 
+    /** 由方向余弦矩阵（DCM）构造四元数 (Construct quaternion from direction cosine matrix (DCM)) */
     static quaternion from_dcm(const mat3& dcm) {
         double trace = dcm.m[0][0] + dcm.m[1][1] + dcm.m[2][2];
         quaternion q;
@@ -91,6 +104,7 @@ struct quaternion {
         return q.normalized();
     }
 
+    /** 转换为方向余弦矩阵（DCM） (Convert to direction cosine matrix (DCM)) */
     mat3 to_dcm() const {
         quaternion q = normalized();
         double xx = q.x * q.x, yy = q.y * q.y, zz = q.z * q.z;
@@ -111,6 +125,7 @@ struct quaternion {
     }
 };
 
+/** 球面线性插值（Slerp） (Spherical linear interpolation (Slerp)) */
 inline quaternion slerp(const quaternion& a, const quaternion& b, double t) {
     quaternion qa = a.normalized();
     quaternion qb = b.normalized();

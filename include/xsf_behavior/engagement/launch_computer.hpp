@@ -8,83 +8,96 @@
 
 namespace xsf_math {
 
-// 交战行为层：发射计算机控制器。
+// 发射计算机控制器（Launch Computer Controller）
+// 交战行为层：对每条候选目标评估发射可行性、飞行时间、拦截点及约束检查
 //
-// 参考 xsf-core XsfLaunchComputer：
-// - 对每条“候选目标”给出 TOF、预测拦截点、约束检查、LAR 门限结论；
-// - 使用 validity flag 指出哪些字段可信，上层按需读取；
-// - 约束项参考 XsfLaunchComputer::Constraints（Δ 高度 / 斜距 / 离轴角 / 速度闭合）。
-// 本模块只做“是否可以打”的判定与运动学预测，不真正发射武器。
+// 参考 xsf-core XsfLaunchComputer（Reference: xsf-core XsfLaunchComputer）：
+// - 对每条候选目标给出飞行时间（Time of Flight, TOF）、预测拦截点（Predicted Intercept Point）、
+//   约束检查（Constraint Checks）、发射可接受区（Launch Acceptability Region, LAR）门限结论
+// - 使用有效性标志位（Validity Flag）指出哪些字段可信，上层按需读取
+// - 约束项：高度差（Delta Altitude）、斜距（Slant Range）、离轴角（Off-Boresight Angle）、速度闭合（Closing Speed）
+// 本模块只做"是否可以发射"的判定与运动学预测，不真正发射武器
+// (This module only performs "can we fire" determination and kinematic prediction; it does not actually launch weapons).
 
 namespace launch_computer_validity {
-    constexpr unsigned int launch_time        = 0x0001u;
-    constexpr unsigned int launcher_bearing   = 0x0002u;
-    constexpr unsigned int launcher_elevation = 0x0004u;
-    constexpr unsigned int time_of_flight     = 0x0008u;
-    constexpr unsigned int intercept_time     = 0x0010u;
-    constexpr unsigned int intercept_point    = 0x0020u;
+    constexpr unsigned int launch_time        = 0x0001u;  // 发射时间有效 (launch time valid)
+    constexpr unsigned int launcher_bearing   = 0x0002u;  // 发射方位有效 (launcher bearing valid)
+    constexpr unsigned int launcher_elevation = 0x0004u;  // 发射俯仰有效 (launcher elevation valid)
+    constexpr unsigned int time_of_flight     = 0x0008u;  // 飞行时间有效 (time of flight valid)
+    constexpr unsigned int intercept_time     = 0x0010u;  // 拦截时间有效 (intercept time valid)
+    constexpr unsigned int intercept_point    = 0x0020u;  // 拦截点有效 (intercept point valid)
 }  // namespace launch_computer_validity
 
+// 发射约束限值 (Launch constraint limits).
 struct launch_constraint_limits {
-    // 未启用的约束保持在默认“极限”值，对应 ResultIsValidFor 的禁用语义。
-    double max_delta_altitude_m = 1.0e6;
-    double min_delta_altitude_m = -1.0e6;
-    double max_slant_range_m    = 1.0e9;
-    double min_slant_range_m    = 0.0;
-    double max_boresight_rad    = constants::pi;     // 默认不限制
-    double max_opening_speed_mps = 1.0e6;
-    double min_opening_speed_mps = -1.0e6;
-    double max_time_of_flight_s  = 1.0e6;
+    // 未启用的约束保持在默认“极限”值，对应 ResultIsValidFor 的禁用语义
+    // (Unenabled constraints stay at default "extreme" values, corresponding to disabled semantics in ResultIsValidFor).
+    double max_delta_altitude_m = 1.0e6;   // 最大高度差 (maximum delta altitude)
+    double min_delta_altitude_m = -1.0e6;  // 最小高度差 (minimum delta altitude)
+    double max_slant_range_m    = 1.0e9;   // 最大斜距 (maximum slant range)
+    double min_slant_range_m    = 0.0;     // 最小斜距 (minimum slant range)
+    double max_boresight_rad    = constants::pi;     // 默认不限制 (default unlimited)
+    double max_opening_speed_mps = 1.0e6;  // 最大接近速度 (maximum opening/closing speed)
+    double min_opening_speed_mps = -1.0e6; // 最小接近速度 (minimum opening/closing speed)
+    double max_time_of_flight_s  = 1.0e6;  // 最大飞行时间 (maximum time of flight)
 };
 
-// 发射计算机所需的武器/发射平台运动学参数（来自 xsf-core 的推力+巡航段近似）。
+// 发射计算机所需的武器/发射平台运动学参数（来自 xsf-core 的推力+巡航段近似）
+// (Weapon/launch platform kinematic parameters needed by launch computer; from xsf-core thrust + coast approximation).
 struct weapon_kinematics {
-    double avg_thrusting_accel_mps2 = 150.0;  // 推力段平均加速度
-    double burnout_speed_mps        = 900.0;  // 燃尽速度
-    double burn_duration_s          = 6.0;    // 推力段时长
-    double coast_accel_mps2         = -2.0;   // 滑行段（含气动阻力）
-    double min_terminal_speed_mps   = 200.0;
+    double avg_thrusting_accel_mps2 = 150.0;  // 推力段平均加速度 (average thrusting acceleration)
+    double burnout_speed_mps        = 900.0;  // 燃尽速度 (burnout speed)
+    double burn_duration_s          = 6.0;    // 推力段时长 (burn duration)
+    double coast_accel_mps2         = -2.0;   // 滑行段（含气动阻力）(coast acceleration, including aerodynamic drag)
+    double min_terminal_speed_mps   = 200.0;  // 最小末端速度 (minimum terminal speed)
 };
 
-// 目标状态：通常来自 track_manager 的某条确认航迹。
+// 目标状态：通常来自 track_manager 的某条确认航迹
+// (Target state: usually from a confirmed track in track_manager).
 struct launch_candidate {
-    vec3   launcher_position_wcs{};    // 发射平台位置
-    vec3   launcher_forward_wcs{0, 0, 0};  // 发射平台前向，用于离轴角；为零则不检查
-    vec3   target_position_wcs{};
-    vec3   target_velocity_wcs{};
-    vec3   target_acceleration_wcs{};
+    vec3   launcher_position_wcs{};    // 发射平台位置 (launcher position in WCS)
+    vec3   launcher_forward_wcs{0, 0, 0};  // 发射平台前向，用于离轴角；为零则不检查 (launcher forward vector for boresight check; zero = skip check)
+    vec3   target_position_wcs{};      // 目标位置 (target position in WCS)
+    vec3   target_velocity_wcs{};      // 目标速度 (target velocity in WCS)
+    vec3   target_acceleration_wcs{};  // 目标加速度 (target acceleration in WCS)
 };
 
+// 发射计算机结果 (Launch computer result).
 struct launch_computer_result {
-    unsigned int validity_flags = 0u;
-    double       time_of_flight_s = 0.0;
-    double       intercept_time_s = 0.0;
-    vec3         intercept_point_wcs{};
-    double       launcher_bearing_rad   = 0.0;
-    double       launcher_elevation_rad = 0.0;
+    unsigned int validity_flags = 0u;            // 有效性标志位 (validity flags)
+    double       time_of_flight_s = 0.0;         // 飞行时间 (time of flight, TOF)
+    double       intercept_time_s = 0.0;         // 拦截时间 (intercept time)
+    vec3         intercept_point_wcs{};          // 拦截点 (intercept point in WCS)
+    double       launcher_bearing_rad   = 0.0;   // 发射方位角 (launcher bearing)
+    double       launcher_elevation_rad = 0.0;   // 发射俯仰角 (launcher elevation)
 
-    bool all_constraints_met = false;
-    // 违反哪几项约束；与 launch_constraint_limits 对齐。
-    bool violated_delta_altitude = false;
-    bool violated_slant_range    = false;
-    bool violated_boresight      = false;
-    bool violated_opening_speed  = false;
-    bool violated_tof            = false;
+    bool all_constraints_met = false;            // 所有约束是否满足 (whether all constraints are met)
+    // 违反哪几项约束；与 launch_constraint_limits 对齐
+    // (Which constraints are violated; aligned with launch_constraint_limits).
+    bool violated_delta_altitude = false;        // 高度差约束违反 (delta altitude violated)
+    bool violated_slant_range    = false;        // 斜距约束违反 (slant range violated)
+    bool violated_boresight      = false;        // 离轴角约束违反 (boresight violated)
+    bool violated_opening_speed  = false;        // 接近速度约束违反 (opening speed violated)
+    bool violated_tof            = false;        // 飞行时间约束违反 (time of flight violated)
 
+    // 检查指定标志位是否有效 (Check whether specified validity flag is set).
     bool is_valid(unsigned int flag) const { return (validity_flags & flag) != 0u; }
 };
 
+// 发射计算机 (Launch computer).
 struct launch_computer {
-    weapon_kinematics      weapon{};
-    launch_constraint_limits limits{};
-    int intercept_refine_iterations = 4;
+    weapon_kinematics      weapon{};                              // 武器运动学参数 (weapon kinematics)
+    launch_constraint_limits limits{};                            // 约束限值 (constraint limits)
+    int intercept_refine_iterations = 4;                          // 拦截点迭代精化次数 (intercept point refinement iterations)
 
-    // 估算武器平均速度：简单两段平均（推力末速和最小末速的算术均值）。
+    // 估算武器平均速度：简单两段平均（推力末速和最小末速的算术均值）
+    // (Estimate nominal weapon flight speed: simple two-segment average of burnout and minimum terminal speed).
     double nominal_flight_speed_mps() const {
         double avg = 0.5 * (weapon.burnout_speed_mps + weapon.min_terminal_speed_mps);
         return std::max(avg, 1.0);
     }
 
+    // 给定时间后武器飞行距离 (Distance travelled by weapon after given time).
     double distance_travelled_by_weapon(double time_s) const {
         if (time_s <= 0.0) return 0.0;
 
@@ -114,6 +127,7 @@ struct launch_computer {
                weapon.min_terminal_speed_mps * (coast_time - time_to_terminal);
     }
 
+    // 求解到达指定距离所需时间 (Solve time to reach specified range).
     double solve_time_to_range(double range_m) const {
         if (range_m <= 0.0) return 0.0;
 
@@ -133,8 +147,10 @@ struct launch_computer {
         return hi;
     }
 
-    // 基于“等速追击 + 目标线性外推”的二次方程近似拦截时间。
-    // 与 XsfLaunchComputer::EstimatedTimeToIntercept 的工程估算思路一致。
+    // 基于“等速追击 + 目标线性外推”的二次方程近似拦截时间
+    // 与 XsfLaunchComputer::EstimatedTimeToIntercept 的工程估算思路一致
+    // (Approximate intercept time via quadratic equation based on "constant-speed pursuit + target linear extrapolation";
+    //  consistent with XsfLaunchComputer::EstimatedTimeToIntercept engineering estimate).
     launch_computer_result evaluate(const launch_candidate& cand, double sim_time_s) const {
         launch_computer_result r;
 
@@ -144,6 +160,7 @@ struct launch_computer {
         double v_tgt = cand.target_velocity_wcs.magnitude();
 
         // 二次方程： |R + V_t * t|^2 = (v_wpn * t)^2
+        // (Quadratic equation: |R + V_t * t|^2 = (v_wpn * t)^2)
         double a = v_tgt * v_tgt - v_wpn * v_wpn;
         double b = 2.0 * rel_pos.dot(cand.target_velocity_wcs);
         double c = R * R;
@@ -201,9 +218,9 @@ struct launch_computer {
         r.validity_flags |= launch_computer_validity::launcher_bearing;
         r.validity_flags |= launch_computer_validity::launcher_elevation;
 
-        // 约束检查
-        double delta_alt = -aim.z;  // WCS Z 向下
-        double opening   = -cand.target_velocity_wcs.dot(rel_pos) / std::max(R, 1e-6);
+        // 约束检查 (Constraint checks)
+        double delta_alt = -aim.z;  // WCS Z 向下 (WCS Z points downward)
+        double opening   = -cand.target_velocity_wcs.dot(rel_pos) / std::max(R, 1e-6);  // 速度闭合率 (closing velocity)
 
         r.violated_slant_range    = (R > limits.max_slant_range_m) || (R < limits.min_slant_range_m);
         r.violated_delta_altitude = (delta_alt > limits.max_delta_altitude_m) ||
